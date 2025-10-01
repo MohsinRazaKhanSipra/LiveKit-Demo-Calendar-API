@@ -92,7 +92,7 @@ if __name__ == "__main__":
 ```
 
 - Place `client_secret.json` in the project directory.
-- Run the script, sign in with your Google account (e.g., `raza5006@gmail.com`), and approve access.
+- Run the script, sign in with your Google account (e.g., `example@gmail.com`), and approve access.
 - Copy the `refresh_token`, `client_id`, and `client_secret` to your `.env` file.
 
 ### 4. Set Up Environment Variables
@@ -207,7 +207,7 @@ your-repo-name/
 
 - **Invalid Refresh Token**:
   - Regenerate using `get_refresh_token.py`.
-  - Ensure the Google account (e.g., `raza5006@gmail.com`) has access to the calendar.
+  - Ensure the Google account (e.g., `example@gmail.com`) has access to the calendar.
 
 - **LiveKit Issues**:
   - Confirm your LiveKit server is running and accessible.
@@ -232,4 +232,4 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 ## Contact
 
-For issues or questions, contact [raza5006@gmail.com] or open an issue on GitHub.
+For issues or questions, contact [example@gmail.com] or open an issue on GitHub.
