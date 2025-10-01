@@ -8,7 +8,7 @@ from livekit.agents.llm import function_tool, LLM
 from livekit.agents.voice import Agent, AgentSession
 from livekit.plugins import deepgram, openai, silero
 from datetime import datetime
-from google_calendar_api import (
+from tools.google_calendar_api import (
     CreateEventInput,
     ListEventsInput,
     UpdateEventInput,
