@@ -4,6 +4,7 @@ from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
 from datetime import datetime, timedelta
 from pydantic import BaseModel, Field
+from google_auth_oauthlib.flow import InstalledAppFlow 
 from typing import List, Optional
 import json
 import os
@@ -15,6 +16,21 @@ SCOPES = [
     'https://www.googleapis.com/auth/calendar.events',
     'https://www.googleapis.com/auth/calendar.readonly'
 ]
+
+
+SCOPES = ['https://www.googleapis.com/auth/calendar']
+
+def get_access_token():
+    flow = InstalledAppFlow.from_client_secrets_file(
+        r'secrets\google_client_secret.json',  # Path to your client_secret.json
+        SCOPES
+    )
+    creds = flow.run_local_server(port=8000)
+    print("Access token:", creds.token)
+    return creds.token
+
+
+
 
 class CreateEventInput(BaseModel):
     title: str = Field(description="Event title")
