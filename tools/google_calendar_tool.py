@@ -4,6 +4,7 @@ from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
 from datetime import datetime, timedelta
 from pydantic import BaseModel, Field
+from google_auth_oauthlib.flow import InstalledAppFlow 
 from typing import List, Optional
 import json
 import os
@@ -16,11 +17,26 @@ SCOPES = [
     'https://www.googleapis.com/auth/calendar.readonly'
 ]
 
+
+SCOPES_auth_flow = 'https://www.googleapis.com/auth/calendar'
+
+
+def get_access_token():
+    flow = InstalledAppFlow.from_client_secrets_file(
+        r'secrets\google_client_secret.json', 
+        SCOPES_auth_flow
+    )
+    creds = flow.run_local_server(port=8000)
+    print("Access token:", creds.token)
+    return creds.token
+
+
+
+
 class CreateEventInput(BaseModel):
     title: str = Field(description="Event title")
     start_datetime: str = Field(description="ISO8601 start datetime")
     end_datetime: str = Field(description="ISO8601 end datetime")
-    # FIX 1 (Previous Request): Allowed 'null' for attendees
     attendees: Optional[List[str]] = Field(default=[], description="List of attendee emails")
     description: Optional[str] = Field(default="", description="Event description")
     location: Optional[str] = Field(default="", description="Event location")
@@ -28,11 +44,9 @@ class CreateEventInput(BaseModel):
 class ListEventsInput(BaseModel):
     start_datetime: str = Field(description="ISO8601 start datetime for range")
     end_datetime: str = Field(description="ISO8601 end datetime for range")
-    # FIX 2 (New): Allowed 'null' for max_results
     max_results: Optional[int] = Field(default=10, description="Max events to return")
 
 class UpdateEventInput(BaseModel):
-# ... (unchanged)
     event_id: Optional[str] = Field(default=None, description="Event ID to update")
     title: Optional[str] = Field(default=None, description="Event title to match")
     start_datetime: Optional[str] = Field(default=None, description="Start datetime to match (ISO8601)")
@@ -43,14 +57,12 @@ class UpdateEventInput(BaseModel):
     new_description: Optional[str] = Field(default=None, description="New description")
 
 class DeleteEventInput(BaseModel):
-# ... (unchanged)
     event_id: Optional[str] = Field(default=None, description="Event ID to delete")
     title: Optional[str] = Field(default=None, description="Event title to match")
     start_datetime: Optional[str] = Field(default=None, description="Start datetime to match (ISO8601)")
     event_number: Optional[int] = Field(default=None, description="Event number from list")
 
 def build_service_from_refresh_token(refresh_token):
-    # ... (unchanged)
     creds = Credentials(
         token=None,
         refresh_token=refresh_token,
@@ -65,7 +77,6 @@ def build_service_from_refresh_token(refresh_token):
 def create_event_func(input: CreateEventInput, refresh_token: str, timezone: str = 'Asia/Karachi') -> str:
     try:
         service = build_service_from_refresh_token(refresh_token)
-        # Safely handle Optional[List[str]] being None
         attendees_list = input.attendees if input.attendees is not None else []
         event_body = {
             "summary": input.title,
@@ -86,18 +97,17 @@ def create_event_func(input: CreateEventInput, refresh_token: str, timezone: str
 def list_events_func(input: ListEventsInput, refresh_token: str) -> str:
     try:
         service = build_service_from_refresh_token(refresh_token)
-        # Safely get max_results, defaulting to 10 if None is received
         max_results = input.max_results if input.max_results is not None else 10
         events = service.events().list(
             calendarId='primary',
             timeMin=input.start_datetime,
             timeMax=input.end_datetime,
-            maxResults=max_results, # Use the safe value
+            maxResults=max_results, 
             singleEvents=True,
             orderBy='startTime'
         ).execute()
         items = events.get('items', [])
-        # ... (rest of function unchanged)
+
         if not items:
             return "No events found."
         result = []
