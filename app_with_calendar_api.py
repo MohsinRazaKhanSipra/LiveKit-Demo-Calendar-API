@@ -25,7 +25,7 @@ from tools.get_weather_tool import get_weather_by_city
 
 from tools.nexhealth_tool import (
     get_locations_func, get_providers_func, get_available_slots_func,
-    GetProvidersInput, GetAvailableSlotsInput
+    GetAvailableSlotsInput
 )
 
 
@@ -45,9 +45,8 @@ class GoogleCalendarAgent(Agent):
                 For NexHealth, you can find locations, list providers, and check for available appointment slots.
                 The workflow is:
                 1. User asks for locations. You call 'get_nexhealth_locations'.
-                2. User chooses a location. You now have the subdomain needed for other calls.
-                3. User asks for providers. You call 'get_nexhealth_providers'.
-                4. User selects a locations and provider(s) and asks for slots. You call 'check_available_slots' with the required IDs.
+                2. User asks for providers. You call 'get_nexhealth_providers'.
+                3. User selects a locations and provider(s) and asks for slots. You call 'check_available_slots' with the required IDs.
                  
                 Also tell current weather of a specified city. 
                 You can create, list, update, or delete events on google calendar.
@@ -69,30 +68,24 @@ class GoogleCalendarAgent(Agent):
         self.refresh_token = refresh_token
         # self.timezone = 'Asia/Karachi'  # pakistan timezone
         self.timezone = 'America/Chicago' # america central timezone
-        self.nexhealth_context = {"subdomain": None}
+  
 
     
     @function_tool
     async def get_nexhealth_locations(self, context: RunContext):
         """Get a list of all available NexHealth clinic locations."""
         logger.info("Getting NexHealth locations")
-        formatted_locations, subdomain = get_locations_func()
-        if subdomain:
-            self.nexhealth_context["subdomain"] = subdomain
-            logger.info(f"NexHealth subdomain set to: {subdomain}")
+        formatted_locations = get_locations_func()
         return None, formatted_locations
+    
 
     @function_tool
     async def get_nexhealth_providers(self, context: RunContext):
-        """Get a list of providers. The user must get locations first to set the required subdomain."""
-        subdomain = self.nexhealth_context.get("subdomain")
-        if not subdomain:
-            return None, "I need to know the location first. Please ask me to 'show locations' to begin."
-        
-        logger.info(f"Getting NexHealth providers for subdomain: {subdomain}")
-        input_data = GetProvidersInput(subdomain=subdomain)
-        result = get_providers_func(input_data)
+        """Get a list of available providers."""
+        logger.info("Getting NexHealth providers")
+        result = get_providers_func()
         return None, result
+    
 
     @function_tool
     async def check_available_slots(
@@ -104,13 +97,8 @@ class GoogleCalendarAgent(Agent):
         provider_ids: List[int]
     ):
         """Check for available appointment slots for specific locations and providers."""
-        subdomain = self.nexhealth_context.get("subdomain")
-        if not subdomain:
-            return None, "I can't check slots without a location context. Please start by asking for locations."
-        
         logger.info(f"Checking slots for LIDs {location_ids} and PIDs {provider_ids}")
         input_data = GetAvailableSlotsInput(
-            subdomain=subdomain,
             start_date=start_date,
             days=days,
             location_ids=location_ids,
