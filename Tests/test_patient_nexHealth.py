@@ -11,8 +11,8 @@ from tools.nexhealth_tool import _get_api_details
 load_dotenv(dotenv_path='.env') 
 
 
-SUBDOMAIN = 'onera-health-demo-practice'
-LOCATION_ID = 331668
+SUBDOMAIN = os.getenv('NEXHEALTH_SUBDOMAIN')
+LOCATION_ID = os.getenv('NEXHEALTH_TEST_LOCATION_ID')
 
 
 import requests
