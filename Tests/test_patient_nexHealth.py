@@ -102,7 +102,7 @@ def view_patient_func(name: str, date_of_birth: str = None):
 
    
         endpoint = f"{NEXHEALTH_BASE_URL}/patients"
-        
+        print(params)
         response = requests.get(endpoint, headers=HEADERS, params=params)
         response.raise_for_status()
         data = response.json().get("data", {})
@@ -127,5 +127,5 @@ def view_patient_func(name: str, date_of_birth: str = None):
 # results=view_patient_func("John Doe", "1980-01-01")
 # results=view_patient_func("Jane Smith")
 # results=view_patient_func("Abbi Fett")    
-results=view_patient_func("Achaias Tyrell")
+results=view_patient_func("achaias Tyrell", "1983-01-31")
 print(results)
