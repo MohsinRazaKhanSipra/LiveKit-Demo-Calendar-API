@@ -124,8 +124,83 @@ def view_patient_func(name: str, date_of_birth: str = None):
 
 
 
+
+
+
+def create_appointment_func(patient_id: int, provider_id: int, start_time: str, operatory_id: int = None) -> str:
+    """
+    Creates a new appointment for a patient.
+    
+    :param patient_id: The ID of the patient.
+    :param provider_id: The ID of the provider for the appointment.
+    :param start_time: The start time of the appointment (e.g., "YYYY-MM-DDTHH:MM:SSTZ").
+    :param operatory_id: (Optional) The ID of the operatory/room for the appointment.
+    :return: A success or error message.
+    """
+    try:
+     
+        NEXHEALTH_BASE_URL, HEADERS, SUBDOMAIN = _get_api_details()
+
+     
+        params = {
+            "subdomain": SUBDOMAIN,
+            "location_id": LOCATION_ID
+        }
+
+        
+        payload = {
+            "appt": {
+                "patient_id": patient_id,
+                "provider_id": provider_id,
+                "start_time": start_time,
+                "operatory_id": operatory_id,
+            }
+        }
+        
+  
+        endpoint = f"{NEXHEALTH_BASE_URL}/appointments"
+        
+    
+        response = requests.post(
+            endpoint, 
+            headers=HEADERS, 
+            params=params, 
+            json=payload 
+        )
+        
+        response.raise_for_status() 
+        
+    
+        data = response.json()
+        new_appt_id = data.get("data", {}).get("id", "N/A")
+
+        return f"\nSuccessfully created new appointment (ID: {new_appt_id}) for Patient ID {patient_id}."
+
+    except requests.exceptions.HTTPError as e:
+
+        error_details = e.response.text if e.response is not None else "No response body."
+        return f"\nHTTP Error creating appointment: {e}\nDetails: {error_details}"
+    except Exception as e:
+        return f"\nError creating appointment: {e}"
+
+
+
+
+new_appointment_result = create_appointment_func(
+    patient_id=413326833,
+    provider_id=413326781,
+    start_time="2025-10-08T13:06:10+0000",
+    operatory_id=199997
+)
+print(new_appointment_result)
+
+
+
 # results=view_patient_func("John Doe", "1980-01-01")
 # results=view_patient_func("Jane Smith")
 # results=view_patient_func("Abbi Fett")    
-results=view_patient_func("achaias Tyrell", "1983-01-31")
-print(results)
+# results=view_patient_func("achaias Tyrell", "1983-01-31")
+# print(results)
+
+
+
