@@ -188,10 +188,6 @@ def create_appointment_func(patient_id: int, provider_id: int, start_time: str, 
 
 
 
-
-# slots_result = get_available_slots_func("2025-10-08", 7, 413326781)
-# print(slots_result)
-
 # new_appointment_result = create_appointment_func(
 #     patient_id=413326833,
 #     provider_id=413326781,
