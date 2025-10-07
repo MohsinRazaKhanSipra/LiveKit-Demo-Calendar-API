@@ -1,7 +1,8 @@
+from datetime import datetime
 import os
 import requests
 import time
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel, Field
 
 
@@ -15,10 +16,10 @@ token_cache = {
 
 class GetAvailableSlotsInput(BaseModel):
     """Input model for checking available appointment slots."""
-    start_date: str = Field(..., description="The starting date to check for slots, in YYYY-MM-DD format.")
-    days: int = Field(..., description="The number of days from the start date to check for availability.")
-    location_ids: List[int] = Field(..., description="A list of location IDs to check.")
-    provider_ids: List[int] = Field(..., description="A list of provider IDs to check.")
+    start_date: Optional[str] = Field(..., description="The starting date to check for slots, in YYYY-MM-DD format.")
+    days: Optional[int] = Field(..., description="The number of days from the start date to check for availability.")
+    location_ids: Optional[List[int]] = Field(..., description="A list of location IDs to check.")
+    provider_ids: Optional[List[int]] = Field(..., description="A list of provider IDs to check.")
 
 
 def authenticate_and_get_token():
@@ -97,10 +98,13 @@ def get_locations_func():
         for institution in data:
             for loc in institution.get("locations", []):
                 address = f"{loc.get('street_address', '')}, {loc.get('city', '')}"
-                formatted_locations.append(
-                    f"ID: {loc.get('id')}, Name: {loc.get('name')}, Address: {address}"
-                )
-        return "\n".join(formatted_locations)
+                formatted_locations.append({
+                    "id": loc.get('id'),
+                    "name": loc.get('name'),
+                    "address": address
+                })
+        
+        return formatted_locations
     except Exception as e:
         return f"Error fetching locations: {e}"
 
@@ -118,10 +122,14 @@ def get_providers_func():
             return "No providers found for this location."
 
         formatted_providers = [
-            f"ID: {p.get('id')}, Name: {p.get('name')}, Specialty: {p.get('nexhealth_specialty')}"
+            {
+            "id": p.get('id'),
+            "name": p.get('name'),
+            "specialty": p.get('nexhealth_specialty')
+            }
             for p in data
         ]
-        return "\n".join(formatted_providers)
+        return formatted_providers
     except Exception as e:
         return f"Error fetching providers: {e}"
 
@@ -129,15 +137,21 @@ def get_available_slots_func(input_data: GetAvailableSlotsInput):
     """Fetches available appointment slots based on multiple criteria."""
     try:
         NEXHEALTH_BASE_URL, HEADERS, SUBDOMAIN = _get_api_details()
+        
+
+        location_ids = input_data.location_ids if input_data.location_ids is not None else [loc['id'] for loc in get_locations_func() if isinstance(loc, dict)]
+        provider_ids = input_data.provider_ids if input_data.provider_ids is not None else [prov['id'] for prov in get_providers_func() if isinstance(prov, dict)]
+        start_date = input_data.start_date if input_data.start_date is not None else time.strftime("%Y-%m-%d")
+        days = input_data.days if input_data.days is not None else 7
+
         params = {
             "subdomain": SUBDOMAIN,
-            "start_date": input_data.start_date,
-            "days": input_data.days,
-            "lids[]": input_data.location_ids,
-            "pids[]": input_data.provider_ids,
-            "overlapping_operatory_slots": "false"
+            "start_date": start_date,
+            "days": days,
+            "lids[]": location_ids,
+            "pids[]": provider_ids
         }
-        
+
         response = requests.get(f"{NEXHEALTH_BASE_URL}/appointment_slots", headers=HEADERS, params=params)
         response.raise_for_status()
         data = response.json().get("data", [])
@@ -151,12 +165,23 @@ def get_available_slots_func(input_data: GetAvailableSlotsInput):
             lid = item.get('lid')
             slots = item.get('slots', [])
             if slots:
-                time_slots = ", ".join([slot['time'] for slot in slots])
-                results.append(f"For provider {pid} at location {lid}, available slots are: {time_slots}.")
+                results.append({
+                    "provider_id": pid,
+                    "location_id": lid,
+                    "available_slots": [
+                        {
+                            "start_time": slot['time'],
+                            "end_time": slot['end_time']
+                        }
+                        for slot in slots
+                    ]
+                })
+                print(results)
             else:
                 next_date = item.get('next_available_date')
                 results.append(f"For provider {pid} at location {lid}, no slots available. Next available is {next_date}.")
 
-        return "\n".join(results)
+        return results
     except Exception as e:
         return f"Error fetching available slots: {e}"
+    

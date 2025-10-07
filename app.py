@@ -8,7 +8,7 @@ from livekit.agents.llm import function_tool, LLM
 from livekit.agents.voice import Agent, AgentSession
 from livekit.plugins import deepgram, openai, silero, elevenlabs 
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 from tools.google_calendar_tool import (
     CreateEventInput,
     ListEventsInput,
@@ -36,7 +36,7 @@ load_dotenv(dotenv_path='.env')
 
 
 
-class GoogleCalendarAgent(Agent):
+class NexHealthAgent(Agent):
     def __init__(self, refresh_token: str) -> None:
         super().__init__(
             instructions="""
@@ -46,13 +46,12 @@ class GoogleCalendarAgent(Agent):
                 The workflow is:
                 1. User asks for locations. You call 'get_nexhealth_locations'.
                 2. User asks for providers. You call 'get_nexhealth_providers'.
-                3. User selects a locations and provider(s) and asks for slots. You call 'check_available_slots' with the required IDs.
+                3. User asks for available slots. They may or may not provide a location, provider, or date. You call 'check_available_slots' with whatever information the user gives you; all parameters are optional.
                  
                 Also tell current weather of a specified city. 
                 You can create, list, update, or delete events on google calendar.
-                Also provide current weather information when asked using the weather tool for a specified city.
                 Always respond clearly and avoid unpronounceable characters.
-                Current time: {current_time} in Asia/Karachi.
+                Current time: {current_time} in America/Chicago.
                 If the user needs to authenticate, inform them to run the OAuth flow separately.
                 Use natural language for dates (e.g., 'tomorrow at 3 PM') and convert to ISO8601 when needed.
             """.format(current_time=datetime.now().strftime("%I:%M %p, %b %d, %Y")),
@@ -91,12 +90,15 @@ class GoogleCalendarAgent(Agent):
     async def check_available_slots(
         self,
         context: RunContext,
-        start_date: str,
-        days: int,
-        location_ids: List[int],
-        provider_ids: List[int]
+        start_date: Optional[str] = None,
+        days: Optional[int] = None,
+        location_ids: Optional[List[int]] = None,
+        provider_ids: Optional[List[int]] = None,
     ):
-        """Check for available appointment slots for specific locations and providers."""
+        """
+        Check for available appointment slots. All parameters are optional.
+        If no parameters are provided, it will search for all available slots.
+        """
         logger.info(f"Checking slots for LIDs {location_ids} and PIDs {provider_ids}")
         input_data = GetAvailableSlotsInput(
             start_date=start_date,
@@ -161,7 +163,7 @@ async def entrypoint(ctx: JobContext):
 
     session = AgentSession()
     await session.start(
-        agent=GoogleCalendarAgent(refresh_token=refresh_token),
+        agent=NexHealthAgent(refresh_token=refresh_token),
         room=ctx.room
     )
 

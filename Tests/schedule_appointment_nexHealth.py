@@ -1,8 +1,9 @@
+from datetime import datetime
 import os
 import sys
 import requests
 from dotenv import load_dotenv
-
+import requests
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from tools.nexhealth_tool import _get_api_details
@@ -15,7 +16,6 @@ SUBDOMAIN = os.getenv('NEXHEALTH_SUBDOMAIN')
 LOCATION_ID = os.getenv('NEXHEALTH_TEST_LOCATION_ID')
 
 
-import requests
 
 def get_patient_details_func(patient_id: int):
     """
@@ -172,7 +172,8 @@ def create_appointment_func(patient_id: int, provider_id: int, start_time: str, 
         
     
         data = response.json()
-        new_appt_id = data.get("data", {}).get("id", "N/A")
+        new_appt_id = data["data"]["appt"]['id']
+       
 
         return f"\nSuccessfully created new appointment (ID: {new_appt_id}) for Patient ID {patient_id}."
 
@@ -182,25 +183,30 @@ def create_appointment_func(patient_id: int, provider_id: int, start_time: str, 
         return f"\nHTTP Error creating appointment: {e}\nDetails: {error_details}"
     except Exception as e:
         return f"\nError creating appointment: {e}"
+    
 
 
 
 
-new_appointment_result = create_appointment_func(
-    patient_id=413326833,
-    provider_id=413326781,
-    start_time="2025-10-08T13:06:10+0000",
-    operatory_id=199997
-)
-print(new_appointment_result)
+
+# slots_result = get_available_slots_func("2025-10-08", 7, 413326781)
+# print(slots_result)
+
+# new_appointment_result = create_appointment_func(
+#     patient_id=413326833,
+#     provider_id=413326781,
+#     start_time="2025-10-7T15:06:10+0000",
+#     operatory_id=199997
+# )
+# print(new_appointment_result)
 
 
 
 # results=view_patient_func("John Doe", "1980-01-01")
 # results=view_patient_func("Jane Smith")
 # results=view_patient_func("Abbi Fett")    
-# results=view_patient_func("achaias Tyrell", "1983-01-31")
-# print(results)
+results=view_patient_func("mohsin", "1983-01-31")
+print(results)
 
 
 
