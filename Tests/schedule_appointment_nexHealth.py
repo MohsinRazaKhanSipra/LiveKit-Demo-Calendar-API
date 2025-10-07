@@ -138,71 +138,222 @@ def create_appointment_func(patient_id: int, provider_id: int, start_time: str, 
     :return: A success or error message.
     """
     try:
-     
         NEXHEALTH_BASE_URL, HEADERS, SUBDOMAIN = _get_api_details()
 
-     
         params = {
             "subdomain": SUBDOMAIN,
             "location_id": LOCATION_ID
         }
 
-        
         payload = {
             "appt": {
-                "patient_id": patient_id,
-                "provider_id": provider_id,
-                "start_time": start_time,
-                "operatory_id": operatory_id,
+            "patient_id": patient_id,
+            "provider_id": provider_id,
+            "start_time": start_time,
+            "operatory_id": operatory_id,
             }
         }
-        
-  
+
         endpoint = f"{NEXHEALTH_BASE_URL}/appointments"
-        
-    
+
         response = requests.post(
-            endpoint, 
-            headers=HEADERS, 
-            params=params, 
-            json=payload 
+            endpoint,
+            headers=HEADERS,
+            params=params,
+            json=payload
         )
+
+        if response.status_code == 201:
+            data = response.json()
+            appt = data.get("data", {}).get("appt", {})
+            provider_name = appt.get("provider_name", "N/A")
+            appt_time = appt.get("start_time", "N/A")
+            operatory = appt.get("operatory_id", "N/A")
+            note = appt.get("note", "")
+
+            return (
+                f"\nAppointment Created Successfully!\n"
+                f"Appointment ID: {appt.get('id', 'N/A')}\n"
+                f"Patient ID: ({appt.get('patient_id', 'N/A')})\n"
+                f"Provider: {provider_name} (ID: {appt.get('provider_id', 'N/A')})\n"
+                f"Start Time: {appt_time}\n"
+                f"Operatory ID: {operatory}\n"
+                f"Note: {note if note else 'No notes.'}"
+            )
+        elif response.status_code == 400:
+
+            error_info = response.json()
+            error_msg = error_info.get("error")[0]
+           
+            if "slot" in error_msg.lower() or "availability" in error_msg.lower():
+                slot_msg = "\nNo slot available at the requested time. Please choose a different time."
+            else:
+                slot_msg = ""
+           
+            return (f"\nBad Request: The server could not process your request.\n"
+                    f"{slot_msg}\n"
+                    f"Details: {error_msg}")
         
-        response.raise_for_status() 
-        
-    
-        data = response.json()
-        new_appt_id = data["data"]["appt"]['id']
-       
-
-        return f"\nSuccessfully created new appointment (ID: {new_appt_id}) for Patient ID {patient_id}."
-
-    except requests.exceptions.HTTPError as e:
-
-        error_details = e.response.text if e.response is not None else "No response body."
-        return f"\nHTTP Error creating appointment: {e}\nDetails: {error_details}"
+        elif response.status_code == 401:
+            return (
+            "\nUnauthorized: Your API credentials are invalid or missing.\n"
+            "Please verify your authentication details."
+            )
+        elif response.status_code == 403:
+            return (
+            "\nForbidden: You do not have permission to create this appointment.\n"
+            "Contact your administrator if you believe this is an error."
+            )
+        elif response.status_code == 404:
+            return (
+            "\nNot Found: The requested resource could not be found.\n"
+            "Please check the patient, provider, or operatory IDs."
+            )
+        elif response.status_code == 500:
+            return (
+            "\nInternal Server Error: Something went wrong on the server.\n"
+            "Please try again later or contact support if the issue persists."
+            )
+        else:
+            return (
+            f"\nUnexpected Error: Error creating appointment.\n")
     except Exception as e:
-        return f"\nError creating appointment: {e}"
+        return f"\nError creating appointment. exception: {e}"
+
+
+
+def cancel_appointment_func(appointment_id: int) -> str:
+    """
+    Cancels an appointment via a PATCH request.
+    If the appointment is already cancelled, it returns a success message
+    and avoids throwing an error that stops the reschedule process.
+    """
+    try:
+        NEXHEALTH_BASE_URL, HEADERS, SUBDOMAIN = _get_api_details()
+        endpoint = f"{NEXHEALTH_BASE_URL}/appointments/{appointment_id}"
+        params = {"subdomain": SUBDOMAIN}
+        payload = {"appt": {"cancelled": True}}
+
+        response = requests.patch(endpoint, headers=HEADERS, params=params, json=payload)
+        
+        if response.status_code == 200:
+            data = response.json().get("data", {}).get("appt", {})
+         
+            is_cancelled = data.get('cancelled')
+            
+            status = "Cancelled" if is_cancelled else "Not Cancelled"
+            
+            
+            
+            return (
+                f"\nAppointment {status} Successfully!\n"
+                f"Appointment ID: {data.get('id', 'N/A')}"
+            )
+
+        elif response.status_code == 400:
+   
+            error_info = response.json()
+            error_list = error_info.get("error", [])
+            already_cancelled_msg = "Cannot update appointment because it is not synced with the PMS and/or a live client"
+            
+            if already_cancelled_msg in error_list and not error_info.get("code", True):
+                 
+                 return f"\nAppointment ID {appointment_id} is **already cancelled** or cannot be updated, but proceeding with new appointment creation for reschedule."
+            
+            error_msg = error_list[0] if error_list else f"Error: {response.text}"
+            return f"\nError: Bad Request received for appointment {appointment_id}. Details: {error_msg}"
+
+        else:
+      
+            return f"\nError: Received status code {response.status_code} while updating appointment {appointment_id}. Details: {response.text}"
+
+    except Exception as e:
+        return f"\nAn exception occurred while updating appointment ID {appointment_id}: {e}"
+    
+    
+    
+def reschedule_appointment_func(appointment_id: int, patient_id: int, provider_id: int, new_start_time: str, operatory_id: int = None) -> str:
+    """
+    Reschedules an appointment by cancelling the old one and creating a new one.
+    It will proceed to create a new appointment even if the cancellation
+    response indicates the original appointment was already cancelled.
+
+    :param appointment_id: The ID of the original appointment to cancel.
+    :param patient_id: The ID of the patient.
+    :param provider_id: The ID of the provider for the new appointment.
+    :param new_start_time: The new start time for the rescheduled appointment (e.g., "YYYY-MM-DDTHH:MM:SSTZ").
+    :param operatory_id: (Optional) The ID of the operatory for the new appointment.
+    :return: A string summarizing the results of both cancellation and creation.
+    """
+ 
+    cancel_result = cancel_appointment_func(appointment_id)
+    
+ 
+    if "Error:" in cancel_result and "**already cancelled**" not in cancel_result:
+        error_message = (
+            f"Failed to cancel the original appointment (ID: {appointment_id}). "
+            f"Reschedule process stopped.\n"
+            f"Reason: {cancel_result}"
+        )
+        return error_message
+
+  
+    print(f"Original appointment cancellation attempt complete. Result:\n{cancel_result.strip()}")
+    print("\nAttempting to create the new appointment...")
     
 
+    new_appointment_result = create_appointment_func(
+        patient_id=patient_id,
+        provider_id=provider_id,
+        start_time=new_start_time,
+        operatory_id=operatory_id
+    )
+
+ 
+    final_summary = (
+        f"Reschedule Summary \n"
+        f"Original Appointment (ID: {appointment_id}) Cancellation:\n{cancel_result.strip()}\n"
+        f"-----------------------------\n"
+        f"New Appointment Creation:\n{new_appointment_result.strip()}"
+    )
+    
+    return final_summary
 
 
-
+# new appointment
+#-----------------
 # new_appointment_result = create_appointment_func(
 #     patient_id=413326833,
 #     provider_id=413326781,
-#     start_time="2025-10-7T15:06:10+0000",
+#     start_time="2025-10-24T15:06:10+0000",
 #     operatory_id=199997
 # )
 # print(new_appointment_result)
+
+
+# cancelling an appointment
+#-----------------
+# print(cancel_appointment_func(1036299820))
+
+
+# Rescheduling an appointment
+#-----------------
+reschedule_outcome = reschedule_appointment_func(
+    appointment_id=10362796433,
+    patient_id=413326833,
+    provider_id=413326781,
+    new_start_time="2025-10-24T15:06:10+0000", 
+    operatory_id=199997
+)
+print(reschedule_outcome)
 
 
 
 # results=view_patient_func("John Doe", "1980-01-01")
 # results=view_patient_func("Jane Smith")
 # results=view_patient_func("Abbi Fett")    
-results=view_patient_func("mohsin", "1983-01-31")
-print(results)
+# results=view_patient_func("achaias Tyrell", "1983-01-31")
+# print(results)
 
 
 
