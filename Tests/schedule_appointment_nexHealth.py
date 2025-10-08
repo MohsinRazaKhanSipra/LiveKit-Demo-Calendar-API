@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 import requests
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from tools.nexhealth_tool import _get_api_details
+from tools.nexhealth_tool import get_header
 
 
 load_dotenv(dotenv_path='.env') 
@@ -23,7 +23,9 @@ def get_patient_details_func(patient_id: int):
     provider, and upcoming appointments if available.
     """
     try:
-        NEXHEALTH_BASE_URL, HEADERS, SUBDOMAIN = _get_api_details()
+        HEADERS= get_header()
+        SUBDOMAIN = os.getenv('NEXHEALTH_SUBDOMAIN')
+        NEXHEALTH_BASE_URL = os.getenv('NEXHEALTH_BASE_URL')
 
         params = {
             "subdomain": SUBDOMAIN,
@@ -86,7 +88,9 @@ def get_patient_details_func(patient_id: int):
 def view_patient_func(name: str, date_of_birth: str = None):
     """Fetches patient details by name, location ID, and optional date of birth."""
     try:
-        NEXHEALTH_BASE_URL, HEADERS, SUBDOMAIN = _get_api_details()
+        HEADERS= get_header()
+        SUBDOMAIN = os.getenv('NEXHEALTH_SUBDOMAIN')
+        NEXHEALTH_BASE_URL = os.getenv('NEXHEALTH_BASE_URL')
         
 
         params = {
@@ -130,15 +134,11 @@ def view_patient_func(name: str, date_of_birth: str = None):
 def create_appointment_func(patient_id: int, provider_id: int, start_time: str, operatory_id: int = None) -> str:
     """
     Creates a new appointment for a patient.
-    
-    :param patient_id: The ID of the patient.
-    :param provider_id: The ID of the provider for the appointment.
-    :param start_time: The start time of the appointment (e.g., "YYYY-MM-DDTHH:MM:SSTZ").
-    :param operatory_id: (Optional) The ID of the operatory/room for the appointment.
-    :return: A success or error message.
     """
     try:
-        NEXHEALTH_BASE_URL, HEADERS, SUBDOMAIN = _get_api_details()
+        HEADERS= get_header()
+        SUBDOMAIN = os.getenv('NEXHEALTH_SUBDOMAIN')
+        NEXHEALTH_BASE_URL = os.getenv('NEXHEALTH_BASE_URL')
 
         params = {
             "subdomain": SUBDOMAIN,
@@ -147,78 +147,61 @@ def create_appointment_func(patient_id: int, provider_id: int, start_time: str, 
 
         payload = {
             "appt": {
-            "patient_id": patient_id,
-            "provider_id": provider_id,
-            "start_time": start_time,
-            "operatory_id": operatory_id,
+                "patient_id": patient_id,
+                "provider_id": provider_id,
+                "start_time": start_time,
+                "operatory_id": operatory_id,
             }
         }
 
         endpoint = f"{NEXHEALTH_BASE_URL}/appointments"
 
-        response = requests.post(
-            endpoint,
-            headers=HEADERS,
-            params=params,
-            json=payload
+        response = requests.post(endpoint, headers=HEADERS, params=params, json=payload)
+
+        response.raise_for_status()
+
+        data = response.json()
+        appt = data.get("data", {}).get("appt", {})
+        provider_name = appt.get("provider_name", "N/A")
+        appt_time = appt.get("start_time", "N/A")
+        operatory = appt.get("operatory_id", "N/A")
+        note = appt.get("note", "")
+
+        return (
+            f"\nAppointment Created Successfully!\n"
+            f"Appointment ID: {appt.get('id', 'N/A')}\n"
+            f"Patient ID: ({appt.get('patient_id', 'N/A')})\n"
+            f"Provider: {provider_name} (ID: {appt.get('provider_id', 'N/A')})\n"
+            f"Start Time: {appt_time}\n"
+            f"Operatory ID: {operatory}\n"
+            f"Note: {note if note else 'No notes.'}"
         )
 
-        if response.status_code == 201:
-            data = response.json()
-            appt = data.get("data", {}).get("appt", {})
-            provider_name = appt.get("provider_name", "N/A")
-            appt_time = appt.get("start_time", "N/A")
-            operatory = appt.get("operatory_id", "N/A")
-            note = appt.get("note", "")
-
-            return (
-                f"\nAppointment Created Successfully!\n"
-                f"Appointment ID: {appt.get('id', 'N/A')}\n"
-                f"Patient ID: ({appt.get('patient_id', 'N/A')})\n"
-                f"Provider: {provider_name} (ID: {appt.get('provider_id', 'N/A')})\n"
-                f"Start Time: {appt_time}\n"
-                f"Operatory ID: {operatory}\n"
-                f"Note: {note if note else 'No notes.'}"
-            )
-        elif response.status_code == 400:
-
-            error_info = response.json()
-            error_msg = error_info.get("error")[0]
-           
-            if "slot" in error_msg.lower() or "availability" in error_msg.lower():
-                slot_msg = "\nNo slot available at the requested time. Please choose a different time."
-            else:
-                slot_msg = ""
-           
-            return (f"\nBad Request: The server could not process your request.\n"
-                    f"{slot_msg}\n"
-                    f"Details: {error_msg}")
-        
-        elif response.status_code == 401:
-            return (
-            "\nUnauthorized: Your API credentials are invalid or missing.\n"
-            "Please verify your authentication details."
-            )
-        elif response.status_code == 403:
-            return (
-            "\nForbidden: You do not have permission to create this appointment.\n"
-            "Contact your administrator if you believe this is an error."
-            )
-        elif response.status_code == 404:
-            return (
-            "\nNot Found: The requested resource could not be found.\n"
-            "Please check the patient, provider, or operatory IDs."
-            )
-        elif response.status_code == 500:
-            return (
-            "\nInternal Server Error: Something went wrong on the server.\n"
-            "Please try again later or contact support if the issue persists."
-            )
+    except requests.exceptions.HTTPError as http_err:
+        resp = getattr(http_err, "response", None) or response
+        status = getattr(resp, "status_code", "N/A")
+        body_text = None
+        try:
+            json_body = resp.json()
+        except ValueError:
+            body_text = resp.text or str(http_err)
         else:
-            return (
-            f"\nUnexpected Error: Error creating appointment.\n")
+            err = json_body.get("error")
+            if isinstance(err, list) and err:
+                body_text = "; ".join(str(e) for e in err)
+            elif isinstance(err, str) and err:
+                body_text = err
+            else:
+                body_text = json_body.get("description") or json_body.get("message") or str(json_body)
+
+        return (
+            f"\nHTTP Error {status} while creating appointment.\n"
+            f"Details: {body_text}\n"
+            f"Exception: {http_err}"
+        )
+
     except Exception as e:
-        return f"\nError creating appointment. exception: {e}"
+        return f"\nError creating appointment. Exception: {e}"
 
 
 
@@ -229,7 +212,10 @@ def cancel_appointment_func(appointment_id: int) -> str:
     and avoids throwing an error that stops the reschedule process.
     """
     try:
-        NEXHEALTH_BASE_URL, HEADERS, SUBDOMAIN = _get_api_details()
+        HEADERS= get_header()
+        SUBDOMAIN = os.getenv('NEXHEALTH_SUBDOMAIN')
+        NEXHEALTH_BASE_URL = os.getenv('NEXHEALTH_BASE_URL')
+
         endpoint = f"{NEXHEALTH_BASE_URL}/appointments/{appointment_id}"
         params = {"subdomain": SUBDOMAIN}
         payload = {"appt": {"cancelled": True}}
@@ -322,13 +308,13 @@ def reschedule_appointment_func(appointment_id: int, patient_id: int, provider_i
 
 # new appointment
 #-----------------
-# new_appointment_result = create_appointment_func(
-#     patient_id=413326833,
-#     provider_id=413326781,
-#     start_time="2025-10-24T15:06:10+0000",
-#     operatory_id=199997
-# )
-# print(new_appointment_result)
+new_appointment_result = create_appointment_func(
+    patient_id=413326833,
+    provider_id=413326781,
+    start_time="2025-10-24T15:06:10+0000",
+    operatory_id=199997
+)
+print(new_appointment_result)
 
 
 # cancelling an appointment
@@ -338,14 +324,14 @@ def reschedule_appointment_func(appointment_id: int, patient_id: int, provider_i
 
 # Rescheduling an appointment
 #-----------------
-reschedule_outcome = reschedule_appointment_func(
-    appointment_id=10362796433,
-    patient_id=413326833,
-    provider_id=413326781,
-    new_start_time="2025-10-24T15:06:10+0000", 
-    operatory_id=199997
-)
-print(reschedule_outcome)
+# reschedule_outcome = reschedule_appointment_func(
+#     appointment_id=10362796433,
+#     patient_id=413326833,
+#     provider_id=413326781,
+#     new_start_time="2025-10-24T15:06:10+0000", 
+#     operatory_id=199997
+# )
+# print(reschedule_outcome)
 
 
 

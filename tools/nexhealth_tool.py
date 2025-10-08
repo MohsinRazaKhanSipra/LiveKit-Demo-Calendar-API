@@ -22,16 +22,22 @@ class GetAvailableSlotsInput(BaseModel):
     provider_ids: Optional[List[int]] = Field(..., description="A list of provider IDs to check.")
 
 
-def authenticate_and_get_token():
+def get_header():
     """
     Fetches a new bearer token if the current one is invalid or expired.
     Caches the token to reuse it for subsequent requests.
     """
-    # Check if a valid, non-expired token exists
-    if token_cache["token"] and token_cache["expires_at"] > time.time():
-        return token_cache["token"]
 
-    # If not, fetch a new token
+    if token_cache["token"] and token_cache["expires_at"] > time.time():
+        bearer_token = token_cache["token"]
+        headers = {
+            "accept": "application/vnd.Nexhealth+json;version=2",
+            "Authorization": f"Bearer {bearer_token}" 
+        }
+        return headers
+    
+
+
     NEXHEALTH_BASE_URL = os.getenv('NEXHEALTH_BASE_URL')
     NEXHEALTH_API_KEY = os.getenv('NEXHEALTH_API_KEY')
 
@@ -56,8 +62,12 @@ def authenticate_and_get_token():
         # new token and set its expiration time (1 hour from now)
         token_cache["token"] = bearer_token
         token_cache["expires_at"] = time.time() + 3600  # 1 hour
+        headers = {
+            "accept": "application/vnd.Nexhealth+json;version=2",
+            "Authorization": f"Bearer {bearer_token}" # Use the bearer token for API calls
+        }
         
-        return bearer_token
+        return headers
     except requests.exceptions.RequestException as e:
         # Clear variables on failure
         token_cache["token"] = None
@@ -65,28 +75,13 @@ def authenticate_and_get_token():
         raise ConnectionError(f"Could not authenticate with NexHealth: {e}")
 
 
-def _get_api_details():
-    """Fetches bearer token and other necessary details for API calls."""
-    NEXHEALTH_BASE_URL = os.getenv('NEXHEALTH_BASE_URL')
-    NEXHEALTH_SUBDOMAIN = os.getenv('NEXHEALTH_SUBDOMAIN')
-
-    if not NEXHEALTH_BASE_URL or not NEXHEALTH_SUBDOMAIN:
-        raise EnvironmentError("Missing NexHealth URL or Subdomain in .env file.")
-
-    bearer_token = authenticate_and_get_token()
-    
-    headers = {
-        "accept": "application/vnd.Nexhealth+json;version=2",
-        "Authorization": f"Bearer {bearer_token}" # Use the bearer token for API calls
-    }
-    return NEXHEALTH_BASE_URL, headers, NEXHEALTH_SUBDOMAIN
-
 
 
 def get_locations_func():
     """Fetches all locations from the NexHealth API and formats them for display."""
     try:
-        NEXHEALTH_BASE_URL, HEADERS, _ = _get_api_details()
+        HEADERS= get_header()
+        NEXHEALTH_BASE_URL = os.getenv('NEXHEALTH_BASE_URL')
         response = requests.get(f"{NEXHEALTH_BASE_URL}/locations", headers=HEADERS)
         response.raise_for_status()
         data = response.json().get("data", [])
@@ -111,7 +106,9 @@ def get_locations_func():
 def get_providers_func():
     """Fetches providers for the static subdomain defined in the .env file."""
     try:
-        NEXHEALTH_BASE_URL, HEADERS, SUBDOMAIN = _get_api_details()
+        HEADERS= get_header()
+        SUBDOMAIN = os.getenv('NEXHEALTH_SUBDOMAIN')
+        NEXHEALTH_BASE_URL = os.getenv('NEXHEALTH_BASE_URL')
         params = {"subdomain": SUBDOMAIN, "inactive": "false"}
         
         response = requests.get(f"{NEXHEALTH_BASE_URL}/providers", headers=HEADERS, params=params)
@@ -136,7 +133,9 @@ def get_providers_func():
 def get_available_slots_func(input_data: GetAvailableSlotsInput):
     """Fetches available appointment slots based on multiple criteria."""
     try:
-        NEXHEALTH_BASE_URL, HEADERS, SUBDOMAIN = _get_api_details()
+        HEADERS = get_header()
+        SUBDOMAIN = os.getenv('NEXHEALTH_SUBDOMAIN')
+        NEXHEALTH_BASE_URL = os.getenv('NEXHEALTH_BASE_URL')
         
 
         location_ids = input_data.location_ids if input_data.location_ids is not None else [loc['id'] for loc in get_locations_func() if isinstance(loc, dict)]
