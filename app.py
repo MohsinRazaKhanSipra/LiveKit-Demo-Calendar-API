@@ -24,7 +24,7 @@ from tools.google_calendar_tool import (
 from tools.get_weather_tool import get_weather_by_city
 
 from tools.nexhealth_tool import (
-    get_locations_func, get_providers_func, get_available_slots_func,
+    NexHealthClient, 
     GetAvailableSlotsInput
 )
 
@@ -67,6 +67,7 @@ class NexHealthAgent(Agent):
         self.refresh_token = refresh_token
         # self.timezone = 'Asia/Karachi'  # pakistan timezone
         self.timezone = 'America/Chicago' # america central timezone
+        self.nexhealth_client = NexHealthClient()
   
 
     
@@ -74,7 +75,7 @@ class NexHealthAgent(Agent):
     async def get_nexhealth_locations(self, context: RunContext):
         """Get a list of all available NexHealth clinic locations."""
         logger.info("Getting NexHealth locations")
-        formatted_locations = get_locations_func()
+        formatted_locations = self.nexhealth_client.get_locations()
         return None, formatted_locations
     
 
@@ -82,7 +83,7 @@ class NexHealthAgent(Agent):
     async def get_nexhealth_providers(self, context: RunContext):
         """Get a list of available providers."""
         logger.info("Getting NexHealth providers")
-        result = get_providers_func()
+        result = self.nexhealth_client.get_providers()
         return None, result
     
 
@@ -106,7 +107,7 @@ class NexHealthAgent(Agent):
             location_ids=location_ids,
             provider_ids=provider_ids,
         )
-        result = get_available_slots_func(input_data)
+        result = self.nexhealth_client.get_available_slots(input_data)
         return None, result
 
 
@@ -156,10 +157,11 @@ class NexHealthAgent(Agent):
         )
     
 async def entrypoint(ctx: JobContext):
-    refresh_token = get_access_token()
-    if not refresh_token:
-        logger.error("No refresh token found. Please run google oauth flow to authenticate.")
-        return
+    # refresh_token = get_access_token()
+    refresh_token=None
+    # if not refresh_token:
+    #     logger.error("No refresh token found. Please run google oauth flow to authenticate.")
+    #     return
 
     session = AgentSession()
     await session.start(
