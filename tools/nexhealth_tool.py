@@ -1,10 +1,12 @@
 from datetime import datetime
 import os
+from dotenv import load_dotenv
 import requests
 import time
 from typing import List, Optional, Union
 from pydantic import BaseModel, Field
 
+load_dotenv()
 
 class GetAvailableSlotsInput(BaseModel):
     """Input model for checking available appointment slots."""
@@ -14,29 +16,25 @@ class GetAvailableSlotsInput(BaseModel):
     provider_ids: Optional[List[int]] = Field(..., description="A list of provider IDs to check.")
 
 
+
 class NexHealthClient:
     """
     Class-based client to manage NexHealth authentication and API calls.
     Use NexHealthClient().get_headers() to retrieve a valid Authorization header.
     """
+    global NEXHEALTH_API_KEY, NEXHEALTH_BASE_URL, SUBDOMAIN
     #config:
-    # NH=os.getenv('NEXHEALTH_API_KEY')
-    # NEXHEALTH_BASE_URL=os.getenv('NEXHEALTH_BASE_URL')
-    # SUBDOMAIN=os.getenv('NEXHEALTH_SUBDOMAIN')
+    NEXHEALTH_API_KEY =os.getenv('NEXHEALTH_API_KEY')
+    NEXHEALTH_BASE_URL=os.getenv('NEXHEALTH_BASE_URL')
+    SUBDOMAIN=os.getenv('NEXHEALTH_SUBDOMAIN')
 
-    def __init__(self, base_url: Optional[str] = None, api_key: Optional[str] = None,
-                 subdomain: Optional[str] = None, token_ttl: int = 3600, session: Optional[requests.Session] = None):
-        self.base_url = (base_url or os.getenv('NEXHEALTH_BASE_URL') or "").rstrip('/')
-        self.api_key = api_key or os.getenv('NEXHEALTH_API_KEY')
-        self.subdomain = subdomain or os.getenv('NEXHEALTH_SUBDOMAIN')
-        self.token_ttl = token_ttl
-        self.session = session or requests.Session()
-
-        # token cache
+    def __init__(self):
+   
+    
         self._token: Optional[str] = None
         self._expires_at: float = 0.0
 
-        if not self.base_url or not self.api_key:
+        if not NEXHEALTH_BASE_URL or not NEXHEALTH_API_KEY:
             # allow lazily raising when attempting to authenticate, but initialize guard here
             raise EnvironmentError("Missing NexHealth base URL or API key.")
 
@@ -48,14 +46,14 @@ class NexHealthClient:
         Authenticate against NexHealth and populate internal token cache.
         Raises ConnectionError on network/auth failure.
         """
-        auth_url = f"{self.base_url}/authenticates"
+        auth_url = f"{NEXHEALTH_BASE_URL}/authenticates"
         auth_headers = {
             "accept": "application/vnd.Nexhealth+json;version=2",
-            "Authorization": self.api_key
+            "Authorization": NEXHEALTH_API_KEY
         }
 
         try:
-            resp = self.session.post(auth_url, headers=auth_headers)
+            resp = requests.post(auth_url, headers=auth_headers)
             resp.raise_for_status()
             data = resp.json()
             bearer_token = data.get("data", {}).get("token")
@@ -65,7 +63,7 @@ class NexHealthClient:
                 self._expires_at = 0
                 raise ValueError("Failed to retrieve bearer token from NexHealth.")
             self._token = bearer_token
-            self._expires_at = time.time() + int(self.token_ttl)
+            self._expires_at = time.time() + 3600  
         except requests.exceptions.RequestException as e:
             self._token = None
             self._expires_at = 0
@@ -92,7 +90,7 @@ class NexHealthClient:
         """Fetches all locations from the NexHealth API and formats them for display."""
         try:
             headers = self.get_headers()
-            response = requests.get(f"{self.base_url}/locations", headers=headers)
+            response = requests.get(f"{NEXHEALTH_BASE_URL}/locations", headers=headers)
             response.raise_for_status()
             data = response.json().get("data", [])
 
@@ -117,9 +115,9 @@ class NexHealthClient:
         """Fetches providers for the configured subdomain."""
         try:
             headers = self.get_headers()
-            params = {"subdomain": self.subdomain, "inactive": "false"}
+            params = {"subdomain": SUBDOMAIN, "inactive": "false"}
 
-            response = self.session.get(f"{self.base_url}/providers", headers=headers, params=params)
+            response = requests.get(f"{NEXHEALTH_BASE_URL}/providers", headers=headers, params=params)
             response.raise_for_status()
             data = response.json().get("data", [])
 
@@ -157,14 +155,14 @@ class NexHealthClient:
             days = input_data.days if input_data.days is not None else 7
 
             params = {
-                "subdomain": self.subdomain,
+                "subdomain": SUBDOMAIN,
                 "start_date": start_date,
                 "days": days,
                 "lids[]": location_ids,
                 "pids[]": provider_ids
             }
 
-            response = self.session.get(f"{self.base_url}/appointment_slots", headers=headers, params=params)
+            response = requests.get(f"{NEXHEALTH_BASE_URL}/appointment_slots", headers=headers, params=params)
             response.raise_for_status()
             data = response.json().get("data", [])
 
