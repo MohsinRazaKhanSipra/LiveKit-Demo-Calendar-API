@@ -21,6 +21,10 @@ SCOPES = [
 SCOPES_auth_flow = 'https://www.googleapis.com/auth/calendar'
 
 
+
+
+
+
 class CreateEventInput(BaseModel):
     title: str = Field(description="Event title")
     start_datetime: str = Field(description="ISO8601 start datetime")
@@ -50,179 +54,84 @@ class DeleteEventInput(BaseModel):
     start_datetime: Optional[str] = Field(default=None, description="Start datetime to match (ISO8601)")
     event_number: Optional[int] = Field(default=None, description="Event number from list")
 
-class GoogleCalendarClient:
-    def __init__(self, refresh_token: Optional[str] = None, timezone: str = 'Asia/Karachi'):
-        self.refresh_token = refresh_token
-        self.timezone = timezone
-        self.scopes = SCOPES
-        self._service = None
 
-    @staticmethod
-    def get_access_token():
-        flow = InstalledAppFlow.from_client_secrets_file(
-            r'secrets\google_client_secret.json',
-            SCOPES_auth_flow
-        )
-        creds = flow.run_local_server(port=8000)
-        print("Access token:", creds.token)
-        return creds.token
+def get_access_token():
+    flow = InstalledAppFlow.from_client_secrets_file(
+        r'secrets\google_client_secret.json', 
+        SCOPES_auth_flow
+    )
+    creds = flow.run_local_server(port=8000)
+    print("Access token:", creds.token)
+    return creds.token
 
-    def build_service_from_refresh_token(self, refresh_token: Optional[str] = None):
-        token = refresh_token or self.refresh_token
-        if not token:
-            raise ValueError("refresh_token is required to build service")
-        creds = Credentials(
-            token=None,
-            refresh_token=token,
-            token_uri='https://oauth2.googleapis.com/token',
-            client_id=os.getenv('GOOGLE_CLIENT_ID'),
-            client_secret=os.getenv('GOOGLE_CLIENT_SECRET'),
-            scopes=self.scopes
-        )
-        creds.refresh(Request())
-        self._service = build('calendar', 'v3', credentials=creds)
-        return self._service
 
-    def create_event(self, input: CreateEventInput, refresh_token: Optional[str] = None) -> str:
-        try:
-            service = self._service or self.build_service_from_refresh_token(refresh_token)
-            attendees_list = input.attendees if input.attendees is not None else []
-            event_body = {
-                "summary": input.title,
-                "start": {"dateTime": input.start_datetime, "timeZone": self.timezone},
-                "end": {"dateTime": input.end_datetime, "timeZone": self.timezone},
-                "attendees": [{"email": a} for a in attendees_list if "@" in a],
-                "description": input.description,
-                "location": input.location,
-            }
+def build_service_from_refresh_token(refresh_token):
+    creds = Credentials(
+        token=None,
+        refresh_token=refresh_token,
+        token_uri='https://oauth2.googleapis.com/token',
+        client_id=os.getenv('GOOGLE_CLIENT_ID'),
+        client_secret=os.getenv('GOOGLE_CLIENT_SECRET'),
+        scopes=SCOPES
+    )
+    creds.refresh(Request())
+    return build('calendar', 'v3', credentials=creds)
 
-            if input.location and input.location.lower() in ["google meet", "online meeting"]:
-                event_body["conferenceData"] = {"createRequest": {"requestId": f"meet-{datetime.now().timestamp()}"}}
-                created = service.events().insert(calendarId="primary", body=event_body, conferenceDataVersion=1).execute()
-            else:
-                created = service.events().insert(calendarId="primary", body=event_body).execute()
+def create_event_func(input: CreateEventInput, refresh_token: str, timezone: str = 'Asia/Karachi') -> str:
+    try:
+        service = build_service_from_refresh_token(refresh_token)
+        attendees_list = input.attendees if input.attendees is not None else []
+        event_body = {
+            "summary": input.title,
+            "start": {"dateTime": input.start_datetime, "timeZone": timezone},
+            "end": {"dateTime": input.end_datetime, "timeZone": timezone},
+            "attendees": [{"email": a} for a in attendees_list if "@" in a],
+            "description": input.description,
+            "location": input.location,
+            "conferenceData": {"createRequest": {"requestId": f"meet-{datetime.now().timestamp()}"}} if input.location and input.location.lower() in ["google meet", "online meeting"] else None
+        }
+        created = service.events().insert(calendarId="primary", body=event_body, conferenceDataVersion=1).execute()
+        description = f" Description: {input.description}" if input.description else ""
+        return f"Your event is created: {created.get('summary')} at {created['start']['dateTime']}{description}"
+    except Exception as e:
+        logger.error(f"Error creating event: {str(e)}")
+        return f"Error creating event: {str(e) if str(e) else 'Unknown error'}"
 
-            description = f" Description: {input.description}" if input.description else ""
-            return f"Your event is created: {created.get('summary')} at {created['start']['dateTime']}{description}"
-        except Exception as e:
-            logger.error(f"Error creating event: {str(e)}")
-            return f"Error creating event: {str(e) if str(e) else 'Unknown error'}"
+def list_events_func(input: ListEventsInput, refresh_token: str) -> str:
+    try:
+        service = build_service_from_refresh_token(refresh_token)
+        max_results = input.max_results if input.max_results is not None else 10
+        events = service.events().list(
+            calendarId='primary',
+            timeMin=input.start_datetime,
+            timeMax=input.end_datetime,
+            maxResults=max_results, 
+            singleEvents=True,
+            orderBy='startTime'
+        ).execute()
+        items = events.get('items', [])
 
-    def list_events(self, input: ListEventsInput, refresh_token: Optional[str] = None) -> str:
-        try:
-            service = self._service or self.build_service_from_refresh_token(refresh_token)
-            max_results = input.max_results if input.max_results is not None else 10
-            events = service.events().list(
-                calendarId='primary',
-                timeMin=input.start_datetime,
-                timeMax=input.end_datetime,
-                maxResults=max_results,
-                singleEvents=True,
-                orderBy='startTime'
-            ).execute()
-            items = events.get('items', [])
-
-            if not items:
-                return "No events found."
-            result = []
-            for idx, e in enumerate(items, 1):
-                start = e['start'].get('dateTime', e['start'].get('date'))
-                try:
-                    dt = datetime.fromisoformat(start.replace("Z", ""))
-                    natural_time = dt.strftime("%I:%M %p, %b %d").lstrip("0").lower()
-                except:
-                    natural_time = start
-                result.append({"id": e['id'], "summary": e.get('summary', 'No title'), "start": natural_time})
-            return json.dumps(result)
-        except Exception as e:
-            logger.error(f"Error listing events: {str(e)}")
-            return f"Error listing events: {str(e) if str(e) else 'Unknown error'}"
-
-    def update_event(self, input: UpdateEventInput, refresh_token: Optional[str] = None) -> str:
-        try:
-            service = self._service or self.build_service_from_refresh_token(refresh_token)
-            if input.event_number and not input.event_id:
-                events = service.events().list(
-                    calendarId='primary',
-                    timeMin=(datetime.now() - timedelta(days=30)).isoformat() + 'Z',
-                    timeMax=(datetime.now() + timedelta(days=30)).isoformat() + 'Z',
-                    maxResults=10,
-                    singleEvents=True,
-                    orderBy='startTime'
-                ).execute().get('items', [])
-                if input.event_number < 1 or input.event_number > len(events):
-                    return f"Invalid event number: {input.event_number}. Choose between 1 and {len(events)}."
-                input.event_id = events[input.event_number - 1]['id']
-            if not input.event_id and input.title and input.start_datetime:
-                events = service.events().list(
-                    calendarId='primary',
-                    timeMin=input.start_datetime,
-                    timeMax=input.start_datetime,
-                    q=input.title,
-                    singleEvents=True,
-                    maxResults=1
-                ).execute().get('items', [])
-                if not events:
-                    return "No event found with that title and time."
-                input.event_id = events[0]['id']
-            if not input.event_id:
-                return "Event ID, event number, or title with time required."
-            event = service.events().get(calendarId='primary', eventId=input.event_id).execute()
-            if input.new_title:
-                event['summary'] = input.new_title
-            if input.new_start_datetime:
-                event['start'] = {"dateTime": input.new_start_datetime, "timeZone": self.timezone}
-            if input.new_end_datetime:
-                event['end'] = {"dateTime": input.new_end_datetime, "timeZone": self.timezone}
-            if input.new_description:
-                event['description'] = input.new_description
-            updated = service.events().update(calendarId='primary', eventId=input.event_id, body=event).execute()
-            return f"Updated event: {updated.get('summary')} at {updated['start']['dateTime']}"
-        except Exception as e:
-            logger.error(f"Error updating event: {str(e)}")
-            return f"Error updating event: {str(e) if str(e) else 'Unknown error'}"
-
-    def delete_event(self, input: DeleteEventInput, refresh_token: Optional[str] = None) -> str:
-        try:
-            service = self._service or self.build_service_from_refresh_token(refresh_token)
-            event_id = input.event_id
-            if not event_id and input.title and input.start_datetime:
-                try:
-                    start_dt = datetime.fromisoformat(input.start_datetime.replace("Z", ""))
-                    end_dt = start_dt + timedelta(days=1)
-                except ValueError as ve:
-                    return f"Invalid date/time format: {str(ve)}. Please use format like 'Sep 23, 2025 at 6:00 PM'."
-                events = service.events().list(
-                    calendarId='primary',
-                    timeMin=start_dt.isoformat() + 'Z',
-                    timeMax=end_dt.isoformat() + 'Z',
-                    q=input.title,
-                    singleEvents=True,
-                    maxResults=2
-                ).execute().get('items', [])
-                if not events:
-                    return f"No event found with title '{input.title}' at that time."
-                if len(events) > 1:
-                    return f"Multiple events found with title '{input.title}' at that time. Please use event number or list events to select."
-                event_id = events[0]['id']
-            if not event_id and input.event_number:
-                events = service.events().list(
-                    calendarId='primary',
-                    timeMin=(datetime.now() - timedelta(days=30)).isoformat() + 'Z',
-                    timeMax=(datetime.now() + timedelta(days=30)).isoformat() + 'Z',
-                    maxResults=10,
-                    singleEvents=True,
-                    orderBy='startTime'
-                ).execute().get('items', [])
-                if input.event_number < 1 or input.event_number > len(events):
-                    return f"Invalid event number: {input.event_number}. Choose between 1 and {len(events)}."
-                event_id = events[input.event_number - 1]['id']
-            if not event_id:
-                return "Please provide event title with date/time or list events to select."
+        if not items:
+            return "No events found."
+        result = []
+        for idx, e in enumerate(items, 1):
+            start = e['start'].get('dateTime', e['start'].get('date'))
             try:
-                service.events().delete(calendarId='primary', eventId=event_id).execute()
-            except Exception as e:
-                return f"Error deleting event: {str(e) if str(e) else 'Unknown error'}"
+                dt = datetime.fromisoformat(start.replace("Z", ""))
+                natural_time = dt.strftime("%I:%M %p, %b %d").lstrip("0").lower()
+            except:
+                natural_time = start
+            result.append({"id": e['id'], "summary": e.get('summary', 'No title'), "start": natural_time})
+        return json.dumps(result)
+    except Exception as e:
+        logger.error(f"Error listing events: {str(e)}")
+        return f"Error listing events: {str(e) if str(e) else 'Unknown error'}"
+
+
+def update_event_func(input: UpdateEventInput, refresh_token: str, timezone: str = 'Asia/Karachi') -> str:
+    try:
+        service = build_service_from_refresh_token(refresh_token)
+        if input.event_number and not input.event_id:
             events = service.events().list(
                 calendarId='primary',
                 timeMin=(datetime.now() - timedelta(days=30)).isoformat() + 'Z',
@@ -231,9 +140,90 @@ class GoogleCalendarClient:
                 singleEvents=True,
                 orderBy='startTime'
             ).execute().get('items', [])
-            if any(e['id'] == event_id for e in events):
-                return f"Failed to delete event. Please try again or check your calendar connection."
-            return "Event deleted successfully"
+            if input.event_number < 1 or input.event_number > len(events):
+                return f"Invalid event number: {input.event_number}. Choose between 1 and {len(events)}."
+            input.event_id = events[input.event_number - 1]['id']
+        if not input.event_id and input.title and input.start_datetime:
+            events = service.events().list(
+                calendarId='primary',
+                timeMin=input.start_datetime,
+                timeMax=input.start_datetime,
+                q=input.title,
+                singleEvents=True,
+                maxResults=1
+            ).execute().get('items', [])
+            if not events:
+                return "No event found with that title and time."
+            input.event_id = events[0]['id']
+        if not input.event_id:
+            return "Event ID, event number, or title with time required."
+        event = service.events().get(calendarId='primary', eventId=input.event_id).execute()
+        if input.new_title:
+            event['summary'] = input.new_title
+        if input.new_start_datetime:
+            event['start'] = {"dateTime": input.new_start_datetime, "timeZone": timezone}
+        if input.new_end_datetime:
+            event['end'] = {"dateTime": input.new_end_datetime, "timeZone": timezone}
+        if input.new_description:
+            event['description'] = input.new_description
+        updated = service.events().update(calendarId='primary', eventId=input.event_id, body=event).execute()
+        return f"Updated event: {updated.get('summary')} at {updated['start']['dateTime']}"
+    except Exception as e:
+        logger.error(f"Error updating event: {str(e)}")
+        return f"Error updating event: {str(e) if str(e) else 'Unknown error'}"
+
+def delete_event_func(input: DeleteEventInput, refresh_token: str) -> str:
+    try:
+        service = build_service_from_refresh_token(refresh_token)
+        event_id = input.event_id
+        if not event_id and input.title and input.start_datetime:
+            try:
+                start_dt = datetime.fromisoformat(input.start_datetime.replace("Z", ""))
+                end_dt = start_dt + timedelta(days=1)
+            except ValueError as ve:
+                return f"Invalid date/time format: {str(ve)}. Please use format like 'Sep 23, 2025 at 6:00 PM'."
+            events = service.events().list(
+                calendarId='primary',
+                timeMin=start_dt.isoformat() + 'Z',
+                timeMax=end_dt.isoformat() + 'Z',
+                q=input.title,
+                singleEvents=True,
+                maxResults=2
+            ).execute().get('items', [])
+            if not events:
+                return f"No event found with title '{input.title}' at that time."
+            if len(events) > 1:
+                return f"Multiple events found with title '{input.title}' at that time. Please use event number or list events to select."
+            event_id = events[0]['id']
+        if not event_id and input.event_number:
+            events = service.events().list(
+                calendarId='primary',
+                timeMin=(datetime.now() - timedelta(days=30)).isoformat() + 'Z',
+                timeMax=(datetime.now() + timedelta(days=30)).isoformat() + 'Z',
+                maxResults=10,
+                singleEvents=True,
+                orderBy='startTime'
+            ).execute().get('items', [])
+            if input.event_number < 1 or input.event_number > len(events):
+                return f"Invalid event number: {input.event_number}. Choose between 1 and {len(events)}."
+            event_id = events[input.event_number - 1]['id']
+        if not event_id:
+            return "Please provide event title with date/time or list events to select."
+        try:
+            service.events().delete(calendarId='primary', eventId=event_id).execute()
         except Exception as e:
-            logger.error(f"Error deleting event: {str(e)}")
             return f"Error deleting event: {str(e) if str(e) else 'Unknown error'}"
+        events = service.events().list(
+            calendarId='primary',
+            timeMin=(datetime.now() - timedelta(days=30)).isoformat() + 'Z',
+            timeMax=(datetime.now() + timedelta(days=30)).isoformat() + 'Z',
+            maxResults=10,
+            singleEvents=True,
+            orderBy='startTime'
+        ).execute().get('items', [])
+        if any(e['id'] == event_id for e in events):
+            return f"Failed to delete event. Please try again or check your calendar connection."
+        return "Event deleted successfully"
+    except Exception as e:
+        logger.error(f"Error deleting event: {str(e)}")
+        return f"Error deleting event: {str(e) if str(e) else 'Unknown error'}"

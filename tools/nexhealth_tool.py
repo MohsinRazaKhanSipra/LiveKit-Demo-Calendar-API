@@ -33,6 +33,7 @@ class NexHealthClient:
     
         self._token: Optional[str] = None
         self._expires_at: float = 0.0
+        self.authenticate()
 
         if not NEXHEALTH_BASE_URL or not NEXHEALTH_API_KEY:
             # allow lazily raising when attempting to authenticate, but initialize guard here
@@ -63,7 +64,7 @@ class NexHealthClient:
                 self._expires_at = 0
                 raise ValueError("Failed to retrieve bearer token from NexHealth.")
             self._token = bearer_token
-            self._expires_at = time.time() + 3600  
+            self._expires_at = time.time() + 3600 # 1 hour expiry 
         except requests.exceptions.RequestException as e:
             self._token = None
             self._expires_at = 0
@@ -115,7 +116,7 @@ class NexHealthClient:
         """Fetches providers for the configured subdomain."""
         try:
             headers = self.get_headers()
-            params = {"subdomain": SUBDOMAIN, "inactive": "false"}
+            params = {"subdomain": SUBDOMAIN, "inactive": "false", "include[]": "appointment_types"}
 
             response = requests.get(f"{NEXHEALTH_BASE_URL}/providers", headers=headers, params=params)
             response.raise_for_status()
@@ -128,10 +129,12 @@ class NexHealthClient:
                 {
                     "id": p.get('id'),
                     "name": p.get('name'),
-                    "specialty": p.get('nexhealth_specialty')
+                    "specialty": p.get('nexhealth_specialty'),
+                    "appointment_types": [x['name'] for x in p['availabilities'][0]['appointment_types']]
                 }
                 for p in data
             ]
+            print(formatted_providers[0])
             return formatted_providers
         except Exception as e:
             return f"Error fetching providers: {e}"
