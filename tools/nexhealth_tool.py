@@ -5,8 +5,18 @@ import requests
 import time
 from typing import List, Optional, Union
 from pydantic import BaseModel, Field
+from datetime import date
 
 load_dotenv()
+
+class CallerInfo(BaseModel):
+    caller_name: Optional[str] = Field(default=None, description="The full name of the caller")
+    caller_dob: Optional[date] = Field(default=None, description="The date of birth of the caller")
+    caller_phone: Optional[str] = Field(default=None, description="The phone number of the caller")
+    callers_intent: Optional[str] = Field(default=None, description="The intent or purpose of the call from the caller")
+    appt_type: Optional[str] = Field(default=None, description="The type of appointment requested")
+    appt_category: Optional[str] = Field(default=None, description="The category of the appointment")
+
 
 class GetAvailableSlotsInput(BaseModel):
     """Input model for checking available appointment slots."""
