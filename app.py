@@ -45,14 +45,16 @@ class NexHealthAgent(Agent):
         super().__init__(
             instructions="""
                 You are a helpful voice assistant for managing Google Calendar, checking weather, and booking appointments with NexHealth.
-                
+                Gather caller details progressively: name, date of birth (in YYYY-MM-DD format), phone number, intent, appointment type, and category. Whenever the user shares information related to these fields, automatically call 'update_caller_info' to update the stored info without asking for confirmation. Ask one piece at a time only if needed to gather missing details. Use this stored info to filter providers and slots automatically.
+
                 For NexHealth, you can find locations, list providers, and check for available appointment slots.
                 The workflow is:
                 1. User asks for locations. You call 'get_nexhealth_locations'.
                 2. User asks for providers. You call 'get_nexhealth_providers'.
                 3. User asks for available slots. They may or may not provide a location, provider, or date. You call 'check_available_slots' with whatever information the user gives you; all parameters are optional.
+                4. User ask for schedule appointment then schedule the appointment by getting patient_id, provider_id, start_time, operatory_id from previous responses and call 'schedule_appointment'. or You call 'check_available_slots' with whatever information you require.
                 
-                Gather caller details progressively: name, date of birth (in YYYY-MM-DD format), phone number, intent, appointment type, and category. Whenever the user shares information related to these fields, automatically call 'update_caller_info' to update the stored info without asking for confirmation. Ask one piece at a time only if needed to gather missing details. Use this stored info to filter providers and slots automatically.
+  
                 
                 If userdata has caller_name then call user by their name.
                 Also tell current weather of a specified city. 
@@ -79,7 +81,7 @@ class NexHealthAgent(Agent):
 
     
     @function_tool
-    async def get_nexhealth_locations(self, context: RunContext[CallerInfo]):
+    async def get_nexhealth_locations(self, context: RunContext):
         """Get a list of all available NexHealth clinic locations."""
         logger.info("Getting NexHealth locations")
 
@@ -88,7 +90,7 @@ class NexHealthAgent(Agent):
     
 
     @function_tool
-    async def get_nexhealth_providers(self, context: RunContext[CallerInfo]):
+    async def get_nexhealth_providers(self, context: RunContext):
         """Get a list of available providers."""
         logger.info("Getting NexHealth providers")
         result = self.nexhealth_client.get_providers()
@@ -98,7 +100,7 @@ class NexHealthAgent(Agent):
     @function_tool
     async def check_available_slots(
         self,
-        context: RunContext[CallerInfo],
+        context: RunContext,
         start_date: Optional[str] = None,
         days: Optional[int] = None,
         location_ids: Optional[List[int]] = None,
@@ -118,16 +120,29 @@ class NexHealthAgent(Agent):
         result = self.nexhealth_client.get_available_slots(input_data)
         return None, result
     
+
+    @function_tool
+    async def schedule_appointment(
+        self,
+        context: RunContext,
+        patient_id: int,
+        provider_id: int,
+        start_time: str,
+        operatory_id: int,
+    ):
+        
+        """
+        Schedule an appointment with the given details.
+        """
+        print("Scheduling appointment is completed")
+        print(f"Patient ID: {patient_id}, Provider ID: {provider_id}, Start Time: {start_time}, Operatory ID: {operatory_id}")
+        return None, "Scheduling appointment is completed"
+
     @function_tool
     async def update_caller_info(
         self,
-        context: RunContext[CallerInfo],
-        caller_name: Optional[str] = None,
-        caller_dob: Optional[str] = None,  
-        caller_phone: Optional[str] = None,
-        callers_intent: Optional[str] = None,
-        appt_type: Optional[str] = None,
-        appt_category: Optional[str] = None,
+        context: RunContext,
+        input_data: CallerInfo
     ):
         """
         Update caller information in the userdata. Provide only the fields to update; others will remain unchanged.
@@ -136,68 +151,68 @@ class NexHealthAgent(Agent):
         userdata = context.userdata
         updates = {}
 
-        if caller_name is not None:
-            userdata.caller_name = caller_name
-            updates["name"] = caller_name
+        if input_data.caller_name is not None:
+            userdata.caller_name = input_data.caller_name
+            updates["name"] = input_data.caller_name
 
-        if caller_dob is not None:
+        if input_data.caller_dob is not None:
             try:
-                parsed_dob = datetime.strptime(caller_dob, "%Y-%m-%d").date()
+                parsed_dob = datetime.strptime(input_data.caller_dob, "%Y-%m-%d").date()
                 userdata.caller_dob = parsed_dob
-                updates["dob"] = caller_dob
+                updates["dob"] = input_data.caller_dob
             except ValueError:
                 return "Invalid date format for DOB. Use YYYY-MM-DD.", None
 
-        if caller_phone is not None:
-            userdata.caller_phone = caller_phone
-            updates["phone"] = caller_phone
+        if input_data.caller_phone is not None:
+            userdata.caller_phone = input_data.caller_phone
+            updates["phone"] = input_data.caller_phone
 
-        if callers_intent is not None:
-            userdata.callers_intent = callers_intent
-            updates["intent"] = callers_intent
+        if input_data.callers_intent is not None:
+            userdata.callers_intent = input_data.callers_intent
+            updates["intent"] = input_data.callers_intent
 
-        if appt_type is not None:
-            userdata.appt_type = appt_type
-            updates["appt_type"] = appt_type
+        if input_data.appt_type is not None:
+            userdata.appt_type = input_data.appt_type
+            updates["appt_type"] = input_data.appt_type
 
-        if appt_category is not None:
-            userdata.appt_category = appt_category
-            updates["appt_category"] = appt_category
+        if input_data.appt_category is not None:
+            userdata.appt_category = input_data.appt_category
+            updates["appt_category"] = input_data.appt_category
 
         update_summary = ", ".join([f"{k}: {v}" for k, v in updates.items()]) if updates else "No updates"
         return None, f"Successfully updated: {update_summary}"
 
 
     @function_tool
-    async def create_event(self, context: RunContext[CallerInfo], input: CreateEventInput):
+    async def create_event(self, context: RunContext, input: CreateEventInput):
         """Create a calendar event. Also check for conflicts. if there is a conflict, suggest a new time."""
         logger.info(f"Creating event: {input}")
         result = create_event_func(input, self.refresh_token, self.timezone)
         return None, result   
 
     @function_tool
-    async def list_events(self, context: RunContext[CallerInfo], input: ListEventsInput):
+    async def list_events(self, context: RunContext, input: ListEventsInput):
         """List calendar events within a specified time range. or show event of today."""
         logger.info(f"Listing events: {input}")
         result = list_events_func(input, self.refresh_token)
         return None, result
 
     @function_tool
-    async def update_event(self, context: RunContext[CallerInfo], input: UpdateEventInput):
+    async def update_event(self, context: RunContext, input: UpdateEventInput):
         """Update a calendar event by event ID or title or selection from a list of events or date with confirmation"""
         logger.info(f"Updating event: {input}")
         result = update_event_func(input, self.refresh_token, self.timezone)
         return None, result
 
     @function_tool
-    async def delete_event(self, context: RunContext[CallerInfo], input: DeleteEventInput):
+    async def delete_event(self, context: RunContext, input: DeleteEventInput):
         """Delete a calendar event by event ID or title or selection from a list of events or date all with confirmation"""
         logger.info(f"Deleting event: {input}")
         result = delete_event_func(input, self.refresh_token)
         return None, result
     
     @function_tool
-    async def weather_tool(self, context: RunContext[CallerInfo], city_name: str) -> dict:
+    async def weather_tool(self, context: RunContext, city_name: str) -> dict:
         """
         Get current weather information for a given city.
         """
@@ -239,19 +254,10 @@ async def entrypoint(ctx: JobContext):
         room=ctx.room
     )
 
- 
-    session.on("conversation_item_added")
-    async def log_transcription(event: agents.ConversationItemAddedEvent, path: Path):
-        item = event.item
-        if hasattr(item, "text") and item.text:
-            role = item.role
-            text = item.text
-            with open(path, "r") as f:
-                transcript = json.load(f)
-            transcript.append({"role": role, "text": text})
-            with open(path, "w") as f:
-                json.dump(transcript, f, indent=2)
-            # logger.info(f"Logged transcription: {role} - {text}")
+    @session.on("conversation_item_added")
+    def on_conversation_item_added(ev):
+        item = ev.item
+        logger.info(f"Conversation item: role={item.role}, content={item.content}, interrupted={item.interrupted}")
 
     usage_collector = metrics.UsageCollector()
 
