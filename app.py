@@ -11,6 +11,7 @@ from livekit.agents import JobContext, WorkerOptions, cli, RunContext, metrics, 
 from livekit.agents.llm import function_tool, LLM
 from livekit.agents.voice import Agent, AgentSession
 from livekit.plugins import deepgram, openai, silero, elevenlabs 
+
 from datetime import datetime
 from typing import List, Optional
 from tools.google_calendar_tool import (
@@ -34,7 +35,7 @@ from tools.nexhealth_tool import (
 
 
 logger = logging.getLogger("google-calendar-voice-agent")
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 load_dotenv(dotenv_path='.env')
 
@@ -258,7 +259,7 @@ async def entrypoint(ctx: JobContext):
     def on_conversation_item_added(ev):
         item = ev.item
         logger.info(f"Conversation item: role={item.role}, content={item.content}, interrupted={item.interrupted}")
-
+        
     usage_collector = metrics.UsageCollector()
 
     @session.on("metrics_collected")
