@@ -1,0 +1,23 @@
+{
+  "items": [
+    {
+      "id": "item_f840b96ab1d6",
+      "type": "message",
+      "role": "assistant",
+      "content": [
+        "Hello! I can manage your Google Calendar, check the"
+      ],
+      "interrupted": true
+    },
+    {
+      "id": "item_67cce8123e77",
+      "type": "message",
+      "role": "user",
+      "content": [
+        "Hi. My name is Mohsen Raza."
+      ],
+      "interrupted": false,
+      "transcript_confidence": 1.0
+    }
+  ]
+}

@@ -238,22 +238,33 @@ async def entrypoint(ctx: JobContext):
 
     log_dir = Path("logs")
     log_dir.mkdir(exist_ok=True)
-    transcript_path = log_dir / "transcript.json"
+    transcript_path = log_dir/"transcripts"
     metrics_path = log_dir / "metrics.json"
 
  
-    transcript_path.write_text("[]")
+
     metrics_path.write_text("{}")
 
     await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
 
-    
 
     session = AgentSession[CallerInfo](userdata=CallerInfo())
     await session.start(
         agent=NexHealthAgent(refresh_token=refresh_token),
         room=ctx.room
     )
+
+    async def write_transcript():
+        current_date = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{transcript_path}/transcript_{ctx.room.name}_{current_date}.json"
+        
+        with open(filename, 'w') as f:
+            json.dump(session.history.to_dict(), f, indent=2)
+            
+        print(f"Transcript for {ctx.room.name} saved to {filename}")
+
+    ctx.add_shutdown_callback(write_transcript)
+    
 
     @session.on("conversation_item_added")
     def on_conversation_item_added(ev):
