@@ -39,7 +39,7 @@ logger.setLevel(logging.DEBUG)
 
 load_dotenv(dotenv_path='.env')
 
-
+RunContext_T = RunContext[CallerInfo]
 
 class NexHealthAgent(Agent):
     def __init__(self, refresh_token: str) -> None:
@@ -82,7 +82,7 @@ class NexHealthAgent(Agent):
 
     
     @function_tool
-    async def get_nexhealth_locations(self, context: RunContext):
+    async def get_nexhealth_locations(self, context: RunContext_T):
         """Get a list of all available NexHealth clinic locations."""
         logger.info("Getting NexHealth locations")
 
@@ -91,7 +91,7 @@ class NexHealthAgent(Agent):
     
 
     @function_tool
-    async def get_nexhealth_providers(self, context: RunContext):
+    async def get_nexhealth_providers(self, context: RunContext_T):
         """Get a list of available providers."""
         logger.info("Getting NexHealth providers")
         result = self.nexhealth_client.get_providers()
@@ -101,7 +101,7 @@ class NexHealthAgent(Agent):
     @function_tool
     async def check_available_slots(
         self,
-        context: RunContext,
+        context: RunContext_T,
         start_date: Optional[str] = None,
         days: Optional[int] = None,
         location_ids: Optional[List[int]] = None,
@@ -125,7 +125,7 @@ class NexHealthAgent(Agent):
     @function_tool
     async def schedule_appointment(
         self,
-        context: RunContext,
+        context: RunContext_T,
         patient_id: int,
         provider_id: int,
         start_time: str,
@@ -142,8 +142,13 @@ class NexHealthAgent(Agent):
     @function_tool
     async def update_caller_info(
         self,
-        context: RunContext,
-        input_data: CallerInfo
+        context: RunContext_T,
+        caller_name: Optional[str] = None,
+        caller_dob: Optional[str] = None,
+        caller_phone: Optional[str] = None,
+        callers_intent: Optional[str] = None,
+        appt_type: Optional[str] = None,
+        appt_category: Optional[str] = None,
     ):
         """
         Update caller information in the userdata. Provide only the fields to update; others will remain unchanged.
@@ -152,68 +157,68 @@ class NexHealthAgent(Agent):
         userdata = context.userdata
         updates = {}
 
-        if input_data.caller_name is not None:
-            userdata.caller_name = input_data.caller_name
-            updates["name"] = input_data.caller_name
+        if caller_name is not None:
+            userdata.caller_name = caller_name
+            updates["name"] = caller_name
 
-        if input_data.caller_dob is not None:
+        if caller_dob is not None:
             try:
-                parsed_dob = datetime.strptime(input_data.caller_dob, "%Y-%m-%d").date()
+                parsed_dob = datetime.strptime(caller_dob, "%Y-%m-%d").date()
                 userdata.caller_dob = parsed_dob
-                updates["dob"] = input_data.caller_dob
+                updates["dob"] = caller_dob
             except ValueError:
                 return "Invalid date format for DOB. Use YYYY-MM-DD.", None
 
-        if input_data.caller_phone is not None:
-            userdata.caller_phone = input_data.caller_phone
-            updates["phone"] = input_data.caller_phone
+        if caller_phone is not None:
+            userdata.caller_phone = caller_phone
+            updates["phone"] = caller_phone
 
-        if input_data.callers_intent is not None:
-            userdata.callers_intent = input_data.callers_intent
-            updates["intent"] = input_data.callers_intent
+        if callers_intent is not None:
+            userdata.callers_intent = callers_intent
+            updates["intent"] = callers_intent
 
-        if input_data.appt_type is not None:
-            userdata.appt_type = input_data.appt_type
-            updates["appt_type"] = input_data.appt_type
+        if appt_type is not None:
+            userdata.appt_type = appt_type
+            updates["appt_type"] = appt_type
 
-        if input_data.appt_category is not None:
-            userdata.appt_category = input_data.appt_category
-            updates["appt_category"] = input_data.appt_category
+        if appt_category is not None:
+            userdata.appt_category = appt_category
+            updates["appt_category"] = appt_category
 
         update_summary = ", ".join([f"{k}: {v}" for k, v in updates.items()]) if updates else "No updates"
         return None, f"Successfully updated: {update_summary}"
 
 
     @function_tool
-    async def create_event(self, context: RunContext, input: CreateEventInput):
+    async def create_event(self, context: RunContext_T, input: CreateEventInput):
         """Create a calendar event. Also check for conflicts. if there is a conflict, suggest a new time."""
         logger.info(f"Creating event: {input}")
         result = create_event_func(input, self.refresh_token, self.timezone)
         return None, result   
 
     @function_tool
-    async def list_events(self, context: RunContext, input: ListEventsInput):
+    async def list_events(self, context: RunContext_T, input: ListEventsInput):
         """List calendar events within a specified time range. or show event of today."""
         logger.info(f"Listing events: {input}")
         result = list_events_func(input, self.refresh_token)
         return None, result
 
     @function_tool
-    async def update_event(self, context: RunContext, input: UpdateEventInput):
+    async def update_event(self, context: RunContext_T, input: UpdateEventInput):
         """Update a calendar event by event ID or title or selection from a list of events or date with confirmation"""
         logger.info(f"Updating event: {input}")
         result = update_event_func(input, self.refresh_token, self.timezone)
         return None, result
 
     @function_tool
-    async def delete_event(self, context: RunContext, input: DeleteEventInput):
+    async def delete_event(self, context: RunContext_T, input: DeleteEventInput):
         """Delete a calendar event by event ID or title or selection from a list of events or date all with confirmation"""
         logger.info(f"Deleting event: {input}")
         result = delete_event_func(input, self.refresh_token)
         return None, result
     
     @function_tool
-    async def weather_tool(self, context: RunContext, city_name: str) -> dict:
+    async def weather_tool(self, context: RunContext_T, city_name: str) -> dict:
         """
         Get current weather information for a given city.
         """
@@ -240,15 +245,14 @@ async def entrypoint(ctx: JobContext):
     log_dir.mkdir(exist_ok=True)
     transcript_path = log_dir/"transcripts"
     metrics_path = log_dir / "metrics.json"
-
- 
-
     metrics_path.write_text("{}")
+
+    userdata = CallerInfo(ctx=ctx)
 
     await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
 
 
-    session = AgentSession[CallerInfo](userdata=CallerInfo())
+    session = AgentSession[CallerInfo](userdata=userdata)
     await session.start(
         agent=NexHealthAgent(refresh_token=refresh_token),
         room=ctx.room
@@ -264,7 +268,7 @@ async def entrypoint(ctx: JobContext):
         print(f"Transcript for {ctx.room.name} saved to {filename}")
 
     ctx.add_shutdown_callback(write_transcript)
-    
+
 
     @session.on("conversation_item_added")
     def on_conversation_item_added(ev):

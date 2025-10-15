@@ -1,0 +1,120 @@
+{
+  "items": [
+    {
+      "id": "item_2ce65ebdccdc",
+      "type": "message",
+      "role": "assistant",
+      "content": [
+        "Hello! I can manage your Google Calendar, check the weather, or help you find and book NexHealth appointments. How can I help?"
+      ],
+      "interrupted": false
+    },
+    {
+      "id": "item_bad49d3afa11",
+      "type": "message",
+      "role": "user",
+      "content": [
+        "Hi. My name is Mosul."
+      ],
+      "interrupted": false,
+      "transcript_confidence": 0.99902344
+    },
+    {
+      "id": "item_9eaeb2e69ba9/fnc_0",
+      "type": "function_call",
+      "call_id": "call_fqVLJJhBxvTL5vSa7fln2wCZ",
+      "arguments": "{\"caller_name\":\"Mosul\",\"caller_dob\":null,\"caller_phone\":null,\"callers_intent\":null,\"appt_type\":null,\"appt_category\":null}",
+      "name": "update_caller_info"
+    },
+    {
+      "id": "item_7ac671b1a089",
+      "type": "function_call_output",
+      "name": "update_caller_info",
+      "call_id": "call_fqVLJJhBxvTL5vSa7fln2wCZ",
+      "output": "[None, 'Successfully updated: name: Mosul']",
+      "is_error": false
+    },
+    {
+      "id": "item_8ae9f619d165",
+      "type": "message",
+      "role": "assistant",
+      "content": [
+        "Hello, Mosul! How can I assist you today?"
+      ],
+      "interrupted": false
+    },
+    {
+      "id": "item_18bdde1c67cf",
+      "type": "message",
+      "role": "user",
+      "content": [
+        "Well,"
+      ],
+      "interrupted": false,
+      "transcript_confidence": 0.6402588
+    },
+    {
+      "id": "item_84fc6827fede",
+      "type": "message",
+      "role": "assistant",
+      "content": [
+        "Yes? How can I help you, Mosul?"
+      ],
+      "interrupted": false
+    },
+    {
+      "id": "item_59624ff80e78",
+      "type": "message",
+      "role": "user",
+      "content": [
+        "My date of birth is"
+      ],
+      "interrupted": false,
+      "transcript_confidence": 0.984375
+    },
+    {
+      "id": "item_353b4016de2a",
+      "type": "message",
+      "role": "user",
+      "content": [
+        "nineteen ninety nine, February twelve."
+      ],
+      "interrupted": false,
+      "transcript_confidence": 0.9277344
+    },
+    {
+      "id": "item_d4bdb556f53b/fnc_0",
+      "type": "function_call",
+      "call_id": "call_jvmGHTJT4do0MrTavCbDtVNC",
+      "arguments": "{\"caller_name\":null,\"caller_dob\":\"1999-02-12\",\"caller_phone\":null,\"callers_intent\":null,\"appt_type\":null,\"appt_category\":null}",
+      "name": "update_caller_info"
+    },
+    {
+      "id": "item_db8bbcc4feab",
+      "type": "function_call_output",
+      "name": "update_caller_info",
+      "call_id": "call_jvmGHTJT4do0MrTavCbDtVNC",
+      "output": "[None, 'Successfully updated: dob: 1999-02-12']",
+      "is_error": false
+    },
+    {
+      "id": "item_48ae0d3169d1",
+      "type": "message",
+      "role": "assistant",
+      "content": [
+        "Thanks for sharing, Mosul! What would you like to do next?"
+      ],
+      "interrupted": false
+    },
+    {
+      "id": "item_bc35eee165df",
+      "type": "message",
+      "role": "user",
+      "content": [
+        "Can you share my details?"
+      ],
+      "interrupted": false,
+      "transcript_confidence": 0.99902344
+    }
+  ]
+}

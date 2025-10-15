@@ -1,0 +1,23 @@
+{
+  "items": [
+    {
+      "id": "item_269f9fcf1080",
+      "type": "message",
+      "role": "assistant",
+      "content": [
+        "Hello! I can manage your Google Calendar, check the weather, or help you find and book NexHealth appointments. How can I help?"
+      ],
+      "interrupted": false
+    },
+    {
+      "id": "item_f833ddca7d91",
+      "type": "message",
+      "role": "user",
+      "content": [
+        "Hi. My name is Moshe."
+      ],
+      "interrupted": false,
+      "transcript_confidence": 1.0
+    }
+  ]
+}

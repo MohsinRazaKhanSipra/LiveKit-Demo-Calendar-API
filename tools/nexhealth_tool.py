@@ -1,22 +1,28 @@
-from datetime import datetime
 import os
+from dataclasses import dataclass, field
 from dotenv import load_dotenv
 import requests
 import time
 from typing import List, Optional, Union
 from pydantic import BaseModel, Field
 from datetime import date
+from datetime import datetime, timedelta
+from livekit.agents import JobContext
+
 
 load_dotenv()
 
-class CallerInfo(BaseModel):
-    caller_name: Optional[str] = Field(default=None, description="The full name of the caller")
-    caller_dob: Optional[date] = Field(default=None, description="The date of birth of the caller")
-    caller_phone: Optional[str] = Field(default=None, description="The phone number of the caller")
-    callers_intent: Optional[str] = Field(default=None, description="The intent or purpose of the call from the caller")
-    appt_type: Optional[str] = Field(default=None, description="The type of appointment requested")
-    appt_category: Optional[str] = Field(default=None, description="The category of the appointment")
 
+@dataclass
+class CallerInfo():
+    ctx: JobContext
+    caller_name: str="" 
+    caller_dob: date = field(default_factory=date.today)
+    caller_phone: str="" 
+    callers_intent: str="" 
+    appt_type: str=""
+    appt_category: str=""
+    
 
 class GetAvailableSlotsInput(BaseModel):
     """Input model for checking available appointment slots."""
@@ -151,63 +157,242 @@ class NexHealthClient:
 
     def get_available_slots(self, input_data: GetAvailableSlotsInput) -> Union[str, List[dict]]:
         """Fetches available appointment slots based on multiple criteria."""
+        # try:
+        headers = self.get_headers()
+
+        
+        raw_locations = self.get_locations()
+        print(raw_locations)
+        raw_providers = self.get_providers()
+
+        location_ids = input_data.location_ids if input_data.location_ids is not None else [
+            loc['id'] for loc in (raw_locations if isinstance(raw_locations, list) else []) if isinstance(loc, dict)
+        ]
+        provider_ids = input_data.provider_ids if input_data.provider_ids is not None else [
+            prov['id'] for prov in (raw_providers if isinstance(raw_providers, list) else []) if isinstance(prov, dict)
+        ]
+        start_date = input_data.start_date if input_data.start_date is not None else time.strftime("%Y-%m-%d")
+        days = input_data.days if input_data.days is not None else 7
+
+        params = {
+            "subdomain": SUBDOMAIN,
+            "start_date": start_date,
+            "days": days,
+            "lids[]": location_ids,
+            "pids[]": provider_ids
+        }
+
+        response = requests.get(f"{NEXHEALTH_BASE_URL}/appointment_slots", headers=headers, params=params)
+        response.raise_for_status()
+        data = response.json().get("data", [])
+
+        if not data:
+            return "Could not retrieve availability information for the selected criteria."
+
+        results = []
+        for item in data:
+            pid = item.get('pid')
+            lid = item.get('lid')
+            slots = item.get('slots', [])
+            if slots:
+                results.append({
+                    "provider_id": pid,
+                    "location_id": lid,
+                    "available_slots": [
+                        {
+                            "start_time": slot.get('time'),
+                            "end_time": slot.get('end_time')
+                        }
+                        for slot in slots
+                    ]
+                })
+                
+            else:
+                next_date = item.get('next_available_date')
+                results.append({
+                    "message": f"For provider {pid} at location {lid}, no slots available. Next available is {next_date}."
+                })
+
+        return results
+        # except Exception as e:
+        #     return f"Error fetching available slots: {e}"
+        
+
+
+    def search_patients(self, name: str, phone_number: str, date_of_birth: str, location_id: int) -> Union[str, List[dict]]:
+        """Fetches patient details by name, location ID, and optional date of birth."""
         try:
             headers = self.get_headers()
-
-            # Resolve fallback location/provider lists by calling the corresponding methods
-            raw_locations = self.get_locations()
-            raw_providers = self.get_providers()
-
-            location_ids = input_data.location_ids if input_data.location_ids is not None else [
-                loc['id'] for loc in (raw_locations if isinstance(raw_locations, list) else []) if isinstance(loc, dict)
-            ]
-            provider_ids = input_data.provider_ids if input_data.provider_ids is not None else [
-                prov['id'] for prov in (raw_providers if isinstance(raw_providers, list) else []) if isinstance(prov, dict)
-            ]
-            start_date = input_data.start_date if input_data.start_date is not None else time.strftime("%Y-%m-%d")
-            days = input_data.days if input_data.days is not None else 7
+            
 
             params = {
                 "subdomain": SUBDOMAIN,
-                "start_date": start_date,
-                "days": days,
-                "lids[]": location_ids,
-                "pids[]": provider_ids
+                "date_of_birth": date_of_birth, #1
+                "location_id": location_id
             }
 
-            response = requests.get(f"{NEXHEALTH_BASE_URL}/appointment_slots", headers=headers, params=params)
+
+            endpoint = f"{NEXHEALTH_BASE_URL}/patients"
+
+            response = requests.get(endpoint, headers=headers, params=params)
             response.raise_for_status()
-            data = response.json().get("data", [])
+            data = response.json().get("data", {})
+            patients = data.get("patients", [])
 
-            if not data:
-                return "Could not retrieve availability information for the selected criteria."
+            
+            if patients: 
+                result_patient=[]
+                for patient in patients:
+                    if patient.get('name').lower() == name.lower():
+                        if patient['bio']['phone_number'] == phone_number:
+                            result_patient.append({
+                                'id': patient['id'],
+                                'name': patient['name'],
+                                'phone': patient['bio']['phone_number'],
+                                'status': 'verified patient'
+                            })
+                            
+                        else:
+                            result_patient.append({
+                                'id': patient['id'],
+                                'name': patient['name'],
+                                'phone': patient['bio'].get('phone_number'),
+                                'status': 'number not verified'
+                            })
 
-            results = []
-            for item in data:
-                pid = item.get('pid')
-                lid = item.get('lid')
-                slots = item.get('slots', [])
-                if slots:
-                    results.append({
-                        "provider_id": pid,
-                        "location_id": lid,
-                        "available_slots": [
-                            {
-                                "start_time": slot.get('time'),
-                                "end_time": slot.get('end_time')
-                            }
-                            for slot in slots
-                        ]
-                    })
-                    
+                if result_patient:
+                    return result_patient
                 else:
-                    next_date = item.get('next_available_date')
-                    results.append({
-                        "message": f"For provider {pid} at location {lid}, no slots available. Next available is {next_date}."
-                    })
+                    return "no patient found"
 
-            return results
+            
+            return "no patient found"
+
+        
         except Exception as e:
-            return f"Error fetching available slots: {e}"
+            return f"Error fetching patient information: {e}"
+        
 
 
+
+        
+    def view_appointment(self, appointment_id: Optional[int] = None, location_id: Optional[int] = None, days: int=10) -> Union[str, dict, List[dict]]:
+        """Retrieve appointments over the next 10 days (or between provided start/end).
+        If appointment_id is provided, filter results and return that appointment.
+        start/end format: YYYY-MM-DDThh:mm:ss+0000
+        """
+        if appointment_id is not None and not isinstance(appointment_id, int):
+            return "appointment_id must be an integer"
+
+        now = datetime.utcnow()
+        start = now.strftime("%Y-%m-%dT%H:%M:%S+0000")
+        end_dt = now + timedelta(days=days)
+        end = end_dt.strftime("%Y-%m-%dT%H:%M:%S+0000")
+        print(end)
+
+        params = {"subdomain": SUBDOMAIN, "start": start, "end": end, "location_id": location_id}
+        url = f"{NEXHEALTH_BASE_URL}/appointments"
+
+        try:
+            headers = self.get_headers()
+            resp = requests.get(url, headers=headers, params=params)
+            resp.raise_for_status()
+            payload = resp.json()
+            data = payload.get("data", [])
+
+
+            if appointment_id is not None:
+                for appt in data:
+                    if appt.get("id") == appointment_id:
+                        result_single_appt={
+                                'id': appt['id'],
+                                'start_time': appt['start_time'],
+                                'end_time': appt['end_time'],
+                                'appointment_type_id': appt['appointment_type_id']
+                            }
+                        return result_single_appt
+                return f"No appointment found with id {appointment_id} in the requested range."
+
+            result=[]
+            for appt in data:
+                result.append({
+                    'id': appt['id'],
+                    'start_time': appt['start_time'],
+                    'end_time': appt['end_time'],
+                    'appointment_type_id': appt['appointment_type_id']
+                })
+            return result
+
+        except requests.exceptions.RequestException as e:
+            return f"Error fetching appointments: {e}"
+        except Exception as e:
+            return f"Unexpected error fetching appointments: {e}"
+        
+
+
+
+client=NexHealthClient()
+# result=client.search_patients("Achaias Tyrell","4692696088","1983-01-31", 331668)
+# print("------------ Test 1 -----------")
+# print('("Achaias Tyrell","4692696088","1983-01-31", 331668)')
+# print(result)
+# print("\n\n")
+
+# #Appointment related question prompts
+#         #name
+#         #dob
+#         #telephone
+
+
+
+# print("------------ Test 2 -----------")
+# print('("ACHAIAS Tyrell","4692696088","1983-01-31", 331668)')
+# result=client.search_patients("ACHAIAS Tyrell","4692696088","1983-01-31", 331668)
+# print(result)
+# print("\n\n")
+
+# print("------------ Test 3 -----------")
+# print('("Achaias Tyrell","3692696088","1983-01-31", 331668)')
+# result=client.search_patients("Achaias Tyrell","3692696088","1983-01-31", 331668)
+# print(result)
+# print("\n\n")
+
+
+# print("------------ Test 4 -----------")
+# print('("Achaias Tyrell","4692696088","2000-01-30", 331668)')
+# result=client.search_patients("Achaias Tyrell","4692696088","2000-01-30", 331668)
+# print(result)
+# print("\n\n")
+
+
+
+# print("------------ Test 5 -----------")
+# print('("Achaias Tyrell","4692696088","2000-01-30", 331668)')
+# result=client.search_patients("Mohsin Tyrell","4692696088","1983-01-31", 331668)
+# print(result)
+# print("\n\n")
+
+
+
+
+
+
+# print("------------ get_available_slots() -----------")
+# input_data=GetAvailableSlotsInput(
+#             start_date="2025-10-16",
+#             days=1,
+#             location_ids=[331668],
+#             provider_ids=[413326781]
+#         )
+# result=client.get_available_slots(input_data)
+# print(result)
+# print("\n\n")
+
+# print(client.view_appointment(1036290875))
+
+# print(client.view_appointment(1029645607, location_id=331668))
+
+# print(client.view_appointment(location_id=331668))
+
+
+# print(client.view_appointment(location_id=331668, days=30))
