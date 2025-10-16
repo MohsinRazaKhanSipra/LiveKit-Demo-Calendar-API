@@ -1,10 +1,10 @@
 {
-  "llm_prompt_tokens": 8564,
-  "llm_prompt_cached_tokens": 2688,
+  "llm_prompt_tokens": 2369,
+  "llm_prompt_cached_tokens": 0,
   "llm_input_audio_tokens": 0,
-  "llm_completion_tokens": 191,
+  "llm_completion_tokens": 66,
   "llm_output_audio_tokens": 0,
-  "tts_characters_count": 461,
-  "tts_audio_duration": 32.445999999999984,
-  "stt_audio_duration": 74.99999999999986
+  "tts_characters_count": 319,
+  "tts_audio_duration": 16.95050000000001,
+  "stt_audio_duration": 685.0999999999997
 }

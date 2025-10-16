@@ -1,28 +1,16 @@
 import os
-from dataclasses import dataclass, field
 from dotenv import load_dotenv
 import requests
 import time
 from typing import List, Optional, Union
 from pydantic import BaseModel, Field
-from datetime import date
 from datetime import datetime, timedelta
-from livekit.agents import JobContext
 
 
+#load enviroment
 load_dotenv()
 
 
-@dataclass
-class CallerInfo():
-    ctx: JobContext
-    caller_name: str="" 
-    caller_dob: date = field(default_factory=date.today)
-    caller_phone: str="" 
-    callers_intent: str="" 
-    appt_type: str=""
-    appt_category: str=""
-    
 
 class GetAvailableSlotsInput(BaseModel):
     """Input model for checking available appointment slots."""
@@ -104,7 +92,11 @@ class NexHealthClient:
         }
 
     def get_locations(self) -> Union[str, List[dict]]:
-        """Fetches all locations from the NexHealth API and formats them for display."""
+        """Fetches all locations from the NexHealth API and formats them for display.
+
+        Args:
+            None
+        """
         try:
             headers = self.get_headers()
             response = requests.get(f"{NEXHEALTH_BASE_URL}/locations", headers=headers)
@@ -129,7 +121,11 @@ class NexHealthClient:
             return f"Error fetching locations: {e}"
 
     def get_providers(self) -> Union[str, List[dict]]:
-        """Fetches providers for the configured subdomain."""
+        """Fetches providers for the configured subdomain and returns a formatted list.
+
+        Args:
+            None
+        """
         try:
             headers = self.get_headers()
             params = {"subdomain": SUBDOMAIN, "inactive": "false", "include[]": "appointment_types"}
@@ -156,7 +152,15 @@ class NexHealthClient:
             return f"Error fetching providers: {e}"
 
     def get_available_slots(self, input_data: GetAvailableSlotsInput) -> Union[str, List[dict]]:
-        """Fetches available appointment slots based on multiple criteria."""
+        """Fetches available appointment slots based on multiple criteria.
+
+        Args:
+            input_data (GetAvailableSlotsInput): Model containing:
+                - start_date (str, optional): YYYY-MM-DD start date to search from.
+                - days (int, optional): Number of days from start_date to include.
+                - location_ids (List[int], optional): Specific location IDs to filter.
+                - provider_ids (List[int], optional): Specific provider IDs to filter.
+        """
         # try:
         headers = self.get_headers()
 
@@ -220,7 +224,14 @@ class NexHealthClient:
 
 
     def search_patients(self, name: str, phone_number: str, date_of_birth: str, location_id: int) -> Union[str, List[dict]]:
-        """Fetches patient details by name, location ID, and optional date of birth."""
+        """Searches the patient by dob first then using the filter like name and mobile we get patients
+
+        Args:
+            name (str): Full patient name to match (case-insensitive).
+            phone_number (str): Phone number to verify against patient record.
+            date_of_birth (str): Patient DOB in YYYY-MM-DD format.
+            location_id (int): Location ID to restrict the search to.
+        """
         try:
             headers = self.get_headers()
             
@@ -276,11 +287,15 @@ class NexHealthClient:
 
 
         
-    def view_appointment(self, appointment_id: Optional[int] = None, location_id: Optional[int] = None, days: int=10) -> Union[str, dict, List[dict]]:
-        """Retrieve appointments over the next 10 days (or between provided start/end).
-        If appointment_id is provided, filter results and return that appointment.
-        start/end format: YYYY-MM-DDThh:mm:ss+0000
+    def view_appointment(self, appointment_id: Optional[int] = None, location_id: int = None, days: Optional[int]=10) -> Union[str, dict, List[dict]]:
+        """Retrieve appointments for a time window or a single appointment by ID.
+
+        Args:
+            appointment_id (Optional[int]): If provided, return only this appointment ID.
+            location_id (int): Location ID to filter appointments (can be None).
+            days (Optional[int]): Number of days from now to include in the range (default 10).
         """
+        #Function description example
         if appointment_id is not None and not isinstance(appointment_id, int):
             return "appointment_id must be an integer"
 
@@ -331,7 +346,7 @@ class NexHealthClient:
 
 
 
-client=NexHealthClient()
+# client=NexHealthClient()
 # result=client.search_patients("Achaias Tyrell","4692696088","1983-01-31", 331668)
 # print("------------ Test 1 -----------")
 # print('("Achaias Tyrell","4692696088","1983-01-31", 331668)')

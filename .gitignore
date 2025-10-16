@@ -4,3 +4,4 @@ venv
 secrets
 agents-playground/
 Tests/data_testing.py
+/logs
