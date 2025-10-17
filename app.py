@@ -127,6 +127,12 @@ class BaseAgent(Agent):
         """
         room_name = context.userdata.ctx.room.name
 
+        if room_name == "mock_room":
+            await self.session.say("Thank you for calling. Goodbye!")
+            await asyncio.sleep(1)  # Small delay to ensure the message is delivered.
+            logger.info(f"Call ended in mock mode (room: {room_name}) - no deletion needed.")
+            return "Call successfully ended."
+
         if not all([self.api_url, self.api_key, self.api_secret]):
             return "LiveKit API credentials not configured."
 
@@ -213,8 +219,7 @@ class NexHealthAgent(BaseAgent):
     @function_tool
     async def end_call(
         self, 
-        context: RunContext_T,
-        participant_identity: str
+        context: RunContext_T
     ) -> str:
         """
         Details:
@@ -224,12 +229,13 @@ class NexHealthAgent(BaseAgent):
 
         Args:
             context: RunContext_T - run context that provides access to session and userdata.
-            participant_identity: str - identity of the SIP participant being hung up (for logging/tracking).
 
         Returns:
             str: Confirmation message on success or an error message on failure.
         """
-        return await self._end_call_function(context, participant_identity)
+
+        
+        return await self._end_call_function(context)
     
     @function_tool
     async def get_nexhealth_locations(self, context: RunContext_T):
