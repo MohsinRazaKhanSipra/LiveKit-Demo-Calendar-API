@@ -35,6 +35,8 @@ from tools.nexhealth_tool import (
 
 from livekit.api import LiveKitAPI, DeleteRoomRequest
 from livekit.api.sip_service import TransferSIPParticipantRequest
+from livekit.agents import get_job_context
+from livekit import api, rtc
 
 #Loading enviroment variables
 load_dotenv(dotenv_path='.env')
@@ -110,48 +112,28 @@ class BaseAgent(Agent):
 
 
 
-    async def _end_call_function(
-        self, 
-        context: RunContext_T,
-    ) -> str:
+    async def _end_call_function(self):
         """
         Ends (hangs up) the ongoing SIP call by deleting the entire room.
-        This is the correct way to end a SIP call in the latest LiveKit SDK, as
-        HangupSIPParticipantRequest is no longer supported.
-        
-        Args:
-            context: The RunContext providing access to the session userdata and room details.
-            
-        Returns:
-            A confirmation string like "Call successfully ended." or an error message.
-        """
-        room_name = context.userdata.ctx.room.name
 
+        """
+        ctx = get_job_context()
+        if ctx is None:
+            return
+        
+        room_name=ctx.room.name
+        
         if room_name == "mock_room":
             await self.session.say("Thank you for calling. Goodbye!")
-            await asyncio.sleep(1)  # Small delay to ensure the message is delivered.
+            await asyncio.sleep(1)  
             logger.info(f"Call ended in mock mode (room: {room_name}) - no deletion needed.")
             return "Call successfully ended."
-
-        if not all([self.api_url, self.api_key, self.api_secret]):
-            return "LiveKit API credentials not configured."
-
-        async with LiveKitAPI(
-            url=self.api_url, 
-            api_key=self.api_key, 
-            api_secret=self.api_secret
-        ) as livekit_api:
-            await self.session.say("Thank you for calling. Goodbye!")
-            await asyncio.sleep(1) # Small delay to ensure the message is delivered.
-            
-
-            delete_room_request = DeleteRoomRequest(room=room_name)
-            logger.debug(f"Delete room request: {delete_room_request}")
-            
-            await livekit_api.room.delete_room(delete_room_request)
-            logger.info(f"Successfully deleted room {room_name}")
-
-        return "Call successfully ended."
+        
+        await ctx.api.room.delete_room(
+            api.DeleteRoomRequest(
+                room=room_name,
+            )
+        )
     
 
 class NexHealthAgent(BaseAgent):
@@ -217,25 +199,14 @@ class NexHealthAgent(BaseAgent):
 
 
     @function_tool
-    async def end_call(
-        self, 
-        context: RunContext_T
-    ) -> str:
+    async def end_call(self):
         """
         Details:
             End (hang up) the current SIP call by deleting the room via LiveKit API.
             Uses the helper _end_call_function which speaks a goodbye message before
             removing the room.
-
-        Args:
-            context: RunContext_T - run context that provides access to session and userdata.
-
-        Returns:
-            str: Confirmation message on success or an error message on failure.
         """
-
-        
-        return await self._end_call_function(context)
+        return await self._end_call_function()
     
     @function_tool
     async def get_nexhealth_locations(self, context: RunContext_T):
