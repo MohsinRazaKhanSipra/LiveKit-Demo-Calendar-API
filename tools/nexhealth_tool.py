@@ -161,65 +161,75 @@ class NexHealthClient:
                 - location_ids (List[int], optional): Specific location IDs to filter.
                 - provider_ids (List[int], optional): Specific provider IDs to filter.
         """
-        # try:
-        headers = self.get_headers()
+        try:
+            headers = self.get_headers()
 
+            
         
-        raw_locations = self.get_locations()
-        print(raw_locations)
-        raw_providers = self.get_providers()
-
-        location_ids = input_data.location_ids if input_data.location_ids is not None else [
-            loc['id'] for loc in (raw_locations if isinstance(raw_locations, list) else []) if isinstance(loc, dict)
-        ]
-        provider_ids = input_data.provider_ids if input_data.provider_ids is not None else [
-            prov['id'] for prov in (raw_providers if isinstance(raw_providers, list) else []) if isinstance(prov, dict)
-        ]
-        start_date = input_data.start_date if input_data.start_date is not None else time.strftime("%Y-%m-%d")
-        days = input_data.days if input_data.days is not None else 7
-
-        params = {
-            "subdomain": SUBDOMAIN,
-            "start_date": start_date,
-            "days": days,
-            "lids[]": location_ids,
-            "pids[]": provider_ids
-        }
-
-        response = requests.get(f"{NEXHEALTH_BASE_URL}/appointment_slots", headers=headers, params=params)
-        response.raise_for_status()
-        data = response.json().get("data", [])
-
-        if not data:
-            return "Could not retrieve availability information for the selected criteria."
-
-        results = []
-        for item in data:
-            pid = item.get('pid')
-            lid = item.get('lid')
-            slots = item.get('slots', [])
-            if slots:
-                results.append({
-                    "provider_id": pid,
-                    "location_id": lid,
-                    "available_slots": [
-                        {
-                            "start_time": slot.get('time'),
-                            "end_time": slot.get('end_time')
-                        }
-                        for slot in slots
-                    ]
-                })
-                
+            if input_data.location_ids is not None:
+                location_ids = input_data.location_ids
             else:
-                next_date = item.get('next_available_date')
-                results.append({
-                    "message": f"For provider {pid} at location {lid}, no slots available. Next available is {next_date}."
-                })
+                raw_locations = self.get_locations()
+                location_ids = [
+                loc['id']
+                for loc in (raw_locations if isinstance(raw_locations, list) else [])
+                if isinstance(loc, dict) and 'id' in loc
+                ]
 
-        return results
-        # except Exception as e:
-        #     return f"Error fetching available slots: {e}"
+            if input_data.provider_ids is not None:
+                provider_ids = input_data.provider_ids
+            else:
+                raw_providers = self.get_providers()
+                provider_ids = [
+                prov['id']
+                for prov in (raw_providers if isinstance(raw_providers, list) else [])
+                if isinstance(prov, dict) and 'id' in prov
+                ]
+            start_date = input_data.start_date if input_data.start_date is not None else time.strftime("%Y-%m-%d")
+            days = input_data.days if input_data.days is not None else 7
+
+            params = {
+                "subdomain": SUBDOMAIN,
+                "start_date": start_date,
+                "days": days,
+                "lids[]": location_ids,
+                "pids[]": provider_ids
+            }
+
+            response = requests.get(f"{NEXHEALTH_BASE_URL}/appointment_slots", headers=headers, params=params)
+            response.raise_for_status()
+            data = response.json().get("data", [])
+
+            if not data:
+                return "Could not retrieve availability information for the selected criteria."
+
+            results = []
+            for item in data:
+                pid = item.get('pid')
+                lid = item.get('lid')
+                slots = item.get('slots', [])
+                if slots:
+                    results.append({
+                        "provider_id": pid,
+                        "location_id": lid,
+                        "available_slots": [
+                            {
+                                "start_time": slot.get('time'),
+                                "end_time": slot.get('end_time')
+                            }
+                            for slot in slots
+                        ]
+                    })
+                    
+                else:
+                    next_date = item.get('next_available_date')
+                    results.append({
+                        "message": f"For provider {pid} at location {lid}, no slots available. Next available is {next_date}."
+                    })
+
+            return results
+        except Exception as e:
+             return f"Error fetching available slots: {e}"
         
 
 

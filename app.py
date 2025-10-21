@@ -261,14 +261,13 @@ class NexHealthAgent(BaseAgent):
             information that can be used to present options or schedule.
 
         Args:
-            context: RunContext_T - run context (unused here but included for consistency).
             start_date: Optional[str] - ISO date (YYYY-MM-DD) or natural language converted to ISO by caller.
             days: Optional[int] - number of days from start_date to include in search.
             location_ids: Optional[List[int]] - list of location IDs to limit the search.
             provider_ids: Optional[List[int]] - list of provider IDs to limit the search.
 
         Returns:
-            tuple: (None, result) where result contains available slots returned by NexHealthClient.get_available_slots().
+            tuple: (None, result) where result contains available slots.
         """
         logger.info(f"Checking slots for LIDs {location_ids} and PIDs {provider_ids}")
         input_data = GetAvailableSlotsInput(
