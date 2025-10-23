@@ -14,10 +14,13 @@ load_dotenv()
 
 class GetAvailableSlotsInput(BaseModel):
     """Input model for checking available appointment slots."""
-    start_date: Optional[str] = Field(..., description="The starting date to check for slots, in YYYY-MM-DD format.")
-    days: Optional[int] = Field(..., description="The number of days from the start date to check for availability.")
-    location_ids: Optional[List[int]] = Field(..., description="A list of location IDs to check.")
-    provider_ids: Optional[List[int]] = Field(..., description="A list of provider IDs to check.")
+    start_date: Optional[str] = Field(
+        default_factory=lambda: datetime.utcnow().strftime("%Y-%m-%d"),
+        description="The starting date to check for slots, in YYYY-MM-DD format."
+    )
+    days: Optional[int] = Field(7, description="The number of days from the start date to check for availability.")
+    location_ids: Optional[List[int]] = Field(None, description="A list of location IDs to check.")
+    provider_ids: Optional[List[int]] = Field(None, description="A list of provider IDs to check.")
 
 
 
@@ -40,7 +43,7 @@ class NexHealthClient:
         self.authenticate()
 
         if not NEXHEALTH_BASE_URL or not NEXHEALTH_API_KEY:
-            # allow lazily raising when attempting to authenticate, but initialize guard here
+           
             raise EnvironmentError("Missing NexHealth base URL or API key.")
 
     def _is_token_valid(self) -> bool:
@@ -63,7 +66,6 @@ class NexHealthClient:
             data = resp.json()
             bearer_token = data.get("data", {}).get("token")
             if not bearer_token:
-                # clear any stale token
                 self._token = None
                 self._expires_at = 0
                 raise ValueError("Failed to retrieve bearer token from NexHealth.")
@@ -84,7 +86,7 @@ class NexHealthClient:
                 "Authorization": f"Bearer {self._token}"
             }
 
-        # authenticate and return headers
+       
         self.authenticate()
         return {
             "accept": "application/vnd.Nexhealth+json;version=2",
@@ -248,7 +250,7 @@ class NexHealthClient:
 
             params = {
                 "subdomain": SUBDOMAIN,
-                "date_of_birth": date_of_birth, #1
+                "date_of_birth": date_of_birth, 
                 "location_id": location_id
             }
 
@@ -305,7 +307,7 @@ class NexHealthClient:
             location_id (int): Location ID to filter appointments (can be None).
             days (Optional[int]): Number of days from now to include in the range (default 10).
         """
-        #Function description example
+       
         if appointment_id is not None and not isinstance(appointment_id, int):
             return "appointment_id must be an integer"
 
@@ -404,10 +406,10 @@ class NexHealthClient:
 
 # print("------------ get_available_slots() -----------")
 # input_data=GetAvailableSlotsInput(
-#             start_date="2025-10-16",
-#             days=1,
-#             location_ids=[331668],
-#             provider_ids=[413326781]
+#             # start_date="2025-10-16",
+#             # days=1,
+#             # location_ids=[331668],
+#             # provider_ids=[413326781]
 #         )
 # result=client.get_available_slots(input_data)
 # print(result)
