@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 import requests
 import time
-from typing import List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 from pydantic import BaseModel, Field
 from datetime import datetime, timedelta
 
@@ -358,7 +358,62 @@ class NexHealthClient:
 
 
 
-# client=NexHealthClient()
+    def create_patient(
+        self,
+        provider_id: int,
+        first_name: str,
+        last_name: str,
+        email: str,
+        phone_number: str,
+        date_of_birth: str,
+        location_id: int
+    ) -> Dict[str, Any]:
+        """
+        Creates a new patient in the NexHealth system.
+        Returns simplified patient details or raises an error.
+        """
+        try:
+            headers = self.get_headers()
+            headers["content-type"] = "application/json"
+            
+            payload = {
+                "provider": {"provider_id": provider_id},
+                "patient": {
+                    "bio": {
+                        "phone_number": phone_number,
+                        "date_of_birth": date_of_birth
+                    },
+                    "email": email,
+                    "last_name": last_name,
+                    "first_name": first_name
+                }
+            }
+            
+            url = f"{NEXHEALTH_BASE_URL}/patients?subdomain={SUBDOMAIN}&location_id={location_id}"
+            
+            response = requests.post(url, json=payload, headers=headers)
+            response.raise_for_status()
+            data = response.json().get("data", {}).get("user", {})
+            
+            return {
+                "id": data.get("id"),
+                "email": data.get("email"),
+                "first_name": data.get("first_name"),
+                "last_name": data.get("last_name"),
+                "name": data.get("name"),
+                "phone_number": data.get("bio", {}).get("phone_number"),
+                "date_of_birth": data.get("bio", {}).get("date_of_birth"),
+                "created_at": data.get("created_at"),
+                "location_ids": data.get("location_ids", [])
+            }
+        
+        except requests.exceptions.RequestException as e:
+            raise ConnectionError(f"Error creating patient: {e}")
+        
+
+
+
+client=NexHealthClient()
 # result=client.search_patients("Achaias Tyrell","4692696088","1983-01-31", 331668)
 # print("------------ Test 1 -----------")
 # print('("Achaias Tyrell","4692696088","1983-01-31", 331668)')
@@ -421,5 +476,18 @@ class NexHealthClient:
 
 # print(client.view_appointment(location_id=331668))
 
+
+
+print("------------- create_patient() --------------")
+result=client.create_patient(
+    provider_id=413326781,
+    first_name="First3343Name",
+    last_name="Last324Name",
+    email="example@exadmple1.com",
+    phone_number="3292696088",
+    date_of_birth="1990-01-01",
+    location_id=331668
+)
+print(result)
 
 # print(client.view_appointment(location_id=331668, days=30))
